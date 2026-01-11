@@ -20,7 +20,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen>
     with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
-  String? _selectedFilter; // null = all, 'assigned', 'accepted', 'picked_up', etc.
+  String? _selectedFilter;
   late AnimationController _animationController;
 
   @override
@@ -32,7 +32,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
     _animationController.forward();
 
-    // ✅ Charger les livraisons au démarrage
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(deliveriesProvider.notifier).loadDeliveries();
     });
@@ -48,7 +47,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   Widget build(BuildContext context) {
     final List<Widget> screens = [
       _buildHomeContent(),
-      const MapWithOrdersScreen(), // ✅ Nouvelle carte avec bottom sheet
+      const MapWithOrdersScreen(),
       const HistoryScreen(),
       const ProfileScreen(),
     ];
@@ -102,11 +101,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final isRefreshing = deliveriesState.isRefreshing;
     final hasError = deliveriesState.hasError;
 
-    // ✅ Filtrer les assignments selon le filtre sélectionné
     final assignments = _selectedFilter == null
         ? deliveriesState.assignments
         : deliveriesState.assignments
-        .where((a) => a.assignmentStatus.toLowerCase() == _selectedFilter)
+        .where((a) => a.assignmentStatus?.toLowerCase() == _selectedFilter)
         .toList();
 
     return RefreshIndicator(
@@ -131,7 +129,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             ),
           ),
 
-          // ✅ Gestion des états : loading, error, empty, data
           if (isLoading && !isRefreshing)
             const SliverFillRemaining(
               child: Center(
@@ -161,7 +158,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                               context,
                               MaterialPageRoute(
                                 builder: (context) => DeliveryDetailScreen(
-                                  orderUuid: assignments[index].order.uuid,
+                                  orderUuid: assignments[index].order.uuid.toString(),
                                 ),
                               ),
                             );
@@ -301,69 +298,67 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           final isSelected = _selectedFilter == filter['value'];
           return Padding(
             padding: const EdgeInsets.only(right: 10),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              child: InkWell(
-                onTap: () {
-                  setState(() {
-                    _selectedFilter = filter['value'];
-                  });
-                },
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: isSelected
-                        ? const LinearGradient(
-                      colors: [
-                        AppTheme.primaryRed,
-                        AppTheme.accentRed,
-                      ],
-                    )
-                        : null,
-                    color: isSelected ? null : AppTheme.cardLight,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: isSelected
-                          ? Colors.transparent
-                          : AppTheme.textGrey.withOpacity(0.2),
-                      width: 1.5,
-                    ),
-                    boxShadow: isSelected
-                        ? [
-                      BoxShadow(
-                        color: AppTheme.primaryRed.withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ]
-                        : null,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (isSelected) ...[
-                        const Icon(
-                          Icons.check_rounded,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 6),
-                      ],
-                      Text(
-                        filter['label'],
-                        style: TextStyle(
-                          color: isSelected ? Colors.white : AppTheme.textGrey,
-                          fontWeight:
-                          isSelected ? FontWeight.w600 : FontWeight.w500,
-                          fontSize: 14,
-                        ),
-                      ),
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  _selectedFilter = filter['value'];
+                });
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  gradient: isSelected
+                      ? const LinearGradient(
+                    colors: [
+                      AppTheme.primaryRed,
+                      AppTheme.accentRed,
                     ],
+                  )
+                      : null,
+                  color: isSelected ? null : AppTheme.cardLight,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isSelected
+                        ? Colors.transparent
+                        : AppTheme.textGrey.withOpacity(0.2),
+                    width: 1.5,
                   ),
+                  boxShadow: isSelected
+                      ? [
+                    BoxShadow(
+                      color: AppTheme.primaryRed.withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isSelected) ...[
+                      const Icon(
+                        Icons.check_rounded,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Text(
+                      filter['label'],
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : AppTheme.textGrey,
+                        fontWeight:
+                        isSelected ? FontWeight.w600 : FontWeight.w500,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -529,7 +524,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       child: SafeArea(
         child: Container(
           height: 70,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), // ✅ Réduit de 8 à 6
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -580,9 +575,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           });
         },
         borderRadius: BorderRadius.circular(12),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 6), // ✅ Réduit de 8 à 6
           decoration: BoxDecoration(
             color: isSelected
                 ? AppTheme.primaryRed.withOpacity(0.1)
@@ -596,9 +590,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               Icon(
                 isSelected ? activeIcon : inactiveIcon,
                 color: isSelected ? AppTheme.primaryRed : AppTheme.textGrey,
-                size: 21,
+                size: 20, // ✅ Réduit de 21 à 20
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 3), // ✅ Augmenté de 2 à 3
               Text(
                 label,
                 style: TextStyle(

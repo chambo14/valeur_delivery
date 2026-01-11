@@ -6,7 +6,6 @@ import '../../data/providers/history_provider.dart';
 import '../../theme/app_theme.dart';
 import '../delivery/delivery_detail_screen.dart';
 
-
 class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
 
@@ -193,8 +192,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
                 itemBuilder: (context, index) {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 16),
-                    child:
-                    _buildHistoryCard(assignments[index]),
+                    child: _buildHistoryCard(assignments[index]),
                   );
                 },
               ),
@@ -309,8 +307,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
   }
 
   Widget _buildHistoryCard(assignment) {
-    final isDelivered = assignment.assignmentStatus.toLowerCase() == 'delivered' ||
-        assignment.assignmentStatus.toLowerCase() == 'completed';
+    final isDelivered =
+        assignment.assignmentStatus?.toLowerCase() == 'delivered' ||
+            assignment.assignmentStatus?.toLowerCase() == 'completed';
     final statusColor = isDelivered ? AppTheme.success : AppTheme.error;
 
     return Container(
@@ -332,10 +331,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) =>
-                    DeliveryDetailScreen(
-                      orderUuid: assignment.order.uuid, // ✅ Passer l'UUID au lieu de l'assignment
-                    ),
+                builder: (context) => DeliveryDetailScreen(
+                  orderUuid: assignment.order.uuid,
+                ),
               ),
             );
           },
@@ -352,19 +350,59 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            assignment.order.orderNumber,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              color: AppTheme.textDark,
-                            ),
+                          Row(
+                            children: [
+                              Text(
+                                assignment.order.orderNumber ?? 'N/A',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: AppTheme.textDark,
+                                ),
+                              ),
+                              // ✅ Badge EXPRESS
+                              if (assignment.order.isExpress) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primaryRed,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.bolt_rounded,
+                                        color: Colors.white,
+                                        size: 10,
+                                      ),
+                                      SizedBox(width: 2),
+                                      Text(
+                                        'EXPRESS',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 8,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                           const SizedBox(height: 6),
                           Text(
                             assignment.completedAt != null
                                 ? DateFormat('dd/MM/yyyy à HH:mm', 'fr_FR')
                                 .format(assignment.completedAt!)
+                                : assignment.assignedAt != null
+                                ? DateFormat('dd/MM/yyyy à HH:mm', 'fr_FR')
+                                .format(assignment.assignedAt)
                                 : 'Date inconnue',
                             style: const TextStyle(
                               color: AppTheme.textGrey,
@@ -440,7 +478,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              assignment.order.customerName,
+                              assignment.order.customerName ?? 'Client',
                               style: const TextStyle(
                                 color: AppTheme.textDark,
                                 fontSize: 14,
@@ -468,7 +506,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              assignment.order.deliveryAddress,
+                              assignment.order.deliveryAddress ??
+                                  'Adresse non disponible',
                               style: const TextStyle(
                                 color: AppTheme.textGrey,
                                 fontSize: 12,
@@ -485,26 +524,28 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
 
                 const SizedBox(height: 14),
 
+                // ✅ CORRIGÉ : Suppression de la référence à order.items
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    // Zone
                     Row(
                       children: [
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: AppTheme.primaryRed.withOpacity(0.12),
+                            color: AppTheme.warning.withOpacity(0.12),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: const Icon(
-                            Icons.inventory_2_rounded,
+                            Icons.map_rounded,
                             size: 16,
-                            color: AppTheme.primaryRed,
+                            color: AppTheme.warning,
                           ),
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '${assignment.order.items.length} article${assignment.order.items.length > 1 ? 's' : ''}',
+                          assignment.order.zone.name ?? 'Zone',
                           style: const TextStyle(
                             color: AppTheme.textGrey,
                             fontSize: 13,
@@ -513,9 +554,10 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
                         ),
                       ],
                     ),
-                    if (isDelivered && assignment.order.pricing != null)
+                    // Prix
+                    if (isDelivered)
                       Text(
-                        '${NumberFormat('#,###', 'fr_FR').format(assignment.order.pricing!.priceInt)} F',
+                        '${NumberFormat('#,###', 'fr_FR').format(assignment.order.pricing.basePrice.toInt())} F',
                         style: const TextStyle(
                           color: AppTheme.primaryRed,
                           fontSize: 17,

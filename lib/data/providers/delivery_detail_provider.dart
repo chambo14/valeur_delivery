@@ -93,7 +93,7 @@ class DeliveryDetailNotifier extends StateNotifier<DeliveryDetailState> {
     state = state.copyWith(isAccepting: true, errorMessage: null);
 
     final result = await _deliveryRepository.acceptAssignment(
-      state.assignment!.order.uuid, // ✅ Utiliser order.uuid
+      state.assignment!.order.uuid.toString(), // ✅ Utiliser order.uuid
       notes: notes,
     );
 
@@ -134,7 +134,7 @@ class DeliveryDetailNotifier extends StateNotifier<DeliveryDetailState> {
     state = state.copyWith(isRejecting: true, errorMessage: null);
 
     final result = await _deliveryRepository.rejectAssignment(
-      state.assignment!.order.uuid, // ✅ Utiliser order.uuid
+      state.assignment!.order.uuid.toString(), // ✅ Utiliser order.uuid
       notes: notes,
     );
 
@@ -165,7 +165,7 @@ class DeliveryDetailNotifier extends StateNotifier<DeliveryDetailState> {
     state = state.copyWith(isUpdatingStatus: true, errorMessage: null);
 
     final result = await _deliveryRepository.updateAssignmentStatus(
-      state.assignment!.order.uuid, // ✅ Utiliser order.uuid
+      state.assignment!.order.uuid.toString(), // ✅ Utiliser order.uuid
       newStatus,
       notes: notes,
     );
@@ -204,7 +204,7 @@ class DeliveryDetailNotifier extends StateNotifier<DeliveryDetailState> {
   /// Rafraîchir le détail
   Future<void> refreshDetail() async {
     if (state.assignment == null) return;
-    await loadOrderDetail(state.assignment!.order.uuid);
+    await loadOrderDetail(state.assignment!.order.uuid.toString());
   }
 
   /// Réinitialiser l'état

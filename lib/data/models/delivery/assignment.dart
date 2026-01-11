@@ -1,8 +1,8 @@
 import 'order.dart';
 
 class Assignment {
-  final String assignmentUuid;
-  final String assignmentStatus;
+  final String? assignmentUuid;
+  final String? assignmentStatus;
   final DateTime assignedAt;
   final DateTime? acceptedAt;
   final DateTime? completedAt;
@@ -18,18 +18,28 @@ class Assignment {
   });
 
   factory Assignment.fromJson(Map<String, dynamic> json) {
-    return Assignment(
-      assignmentUuid: json['assignment_uuid'] as String,
-      assignmentStatus: json['assignment_status'] as String,
-      assignedAt: DateTime.parse(json['assigned_at'] as String),
-      acceptedAt: json['accepted_at'] != null
-          ? DateTime.parse(json['accepted_at'] as String)
-          : null,
-      completedAt: json['completed_at'] != null
-          ? DateTime.parse(json['completed_at'] as String)
-          : null,
-      order: Order.fromJson(json['order'] as Map<String, dynamic>),
-    );
+    try {
+      return Assignment(
+        // ✅ FIX : Utiliser 'as String?' au lieu de 'as String'
+        assignmentUuid: json['assignment_uuid'] as String?,
+        assignmentStatus: json['assignment_status'] as String?,
+        assignedAt: json['assigned_at'] != null
+            ? DateTime.parse(json['assigned_at'] as String)
+            : DateTime.now(), // Valeur par défaut si null
+        acceptedAt: json['accepted_at'] != null
+            ? DateTime.parse(json['accepted_at'] as String)
+            : null,
+        completedAt: json['completed_at'] != null
+            ? DateTime.parse(json['completed_at'] as String)
+            : null,
+        order: Order.fromJson(json['order'] as Map<String, dynamic>),
+      );
+    } catch (e, stackTrace) {
+      print('❌ [Assignment] Parse error: $e');
+      print('   JSON: $json');
+      print('   StackTrace: $stackTrace');
+      rethrow;
+    }
   }
 
   Map<String, dynamic> toJson() {
@@ -45,7 +55,7 @@ class Assignment {
 
   // Helpers
   String get statusDisplay {
-    switch (assignmentStatus.toLowerCase()) {
+    switch (assignmentStatus?.toLowerCase()) {
       case 'assigned':
         return 'Assignée';
       case 'accepted':
@@ -60,16 +70,22 @@ class Assignment {
         return 'Terminée';
       case 'failed':
         return 'Échouée';
+      case 'cancelled':
+        return 'Annulée';
       default:
-        return assignmentStatus;
+        return assignmentStatus ?? 'Inconnu'; // ✅ Valeur par défaut
     }
   }
 
-  bool get isAssigned => assignmentStatus.toLowerCase() == 'assigned';
-  bool get isAccepted => assignmentStatus.toLowerCase() == 'accepted';
-  bool get isCompleted => assignmentStatus.toLowerCase() == 'completed' ||
-      assignmentStatus.toLowerCase() == 'delivered';
-  bool get isFailed => assignmentStatus.toLowerCase() == 'failed';
+  bool get isAssigned => assignmentStatus?.toLowerCase() == 'assigned';
+  bool get isAccepted => assignmentStatus?.toLowerCase() == 'accepted';
+  bool get isPickedUp => assignmentStatus?.toLowerCase() == 'picked_up';
+  bool get isInTransit => assignmentStatus?.toLowerCase() == 'in_transit';
+  bool get isDelivered => assignmentStatus?.toLowerCase() == 'delivered';
+  bool get isCompleted => assignmentStatus?.toLowerCase() == 'completed' ||
+      assignmentStatus?.toLowerCase() == 'delivered';
+  bool get isFailed => assignmentStatus?.toLowerCase() == 'failed';
+  bool get isCancelled => assignmentStatus?.toLowerCase() == 'cancelled';
 
   Assignment copyWith({
     String? assignmentUuid,

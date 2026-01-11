@@ -92,15 +92,15 @@ class _DeliveriesListScreenState extends ConsumerState<DeliveriesListScreen> {
             return Card(
               margin: const EdgeInsets.only(bottom: 12),
               child: ListTile(
-                title: Text(assignment.order.orderNumber),
-                subtitle: Text(assignment.order.customerName),
+                title: Text(assignment.order.orderNumber.toString()),
+                subtitle: Text(assignment.order.customerName.toString()),
                 trailing: assignment.isAssigned
                     ? ElevatedButton(
                   onPressed: () => _handleAccept(
-                      assignment.assignmentUuid),
+                      assignment.assignmentUuid.toString()),
                   child: const Text('Accepter'),
                 )
-                    : Text(assignment.statusDisplay),
+                    : Text(assignment.statusDisplay.toString()),
               ),
             );
           },

@@ -1,140 +1,122 @@
 import 'zone.dart';
 import 'pricing.dart';
-import 'order_item.dart';
 
 class Order {
-  final String uuid;
-  final String orderNumber;
-  final String customerName;
-  final String customerPhone;
-  final String deliveryAddress;
-  final String pickupAddress;
-  final String status;
+  final String? orderUuid;
+  final String? orderNumber;
+  final String? customerName;
+  final String? customerPhone;
+  final String? customerEmail;
+  final String? pickupAddress;
+  final String? deliveryAddress;
   final bool isExpress;
-  final DateTime reservedAt;
-  final String barcodeValue;
+  final String? orderStatus;
+  final DateTime createdAt;
   final Zone zone;
-  final Pricing? pricing;
-  final List<OrderItem> items;
+  final Pricing pricing;
 
   Order({
-    required this.uuid,
-    required this.orderNumber,
-    required this.customerName,
-    required this.customerPhone,
-    required this.deliveryAddress,
-    required this.pickupAddress,
-    required this.status,
-    required this.isExpress,
-    required this.reservedAt,
-    required this.barcodeValue,
+    this.orderUuid,
+    this.orderNumber,
+    this.customerName,
+    this.customerPhone,
+    this.customerEmail,
+    this.pickupAddress,
+    this.deliveryAddress,
+    this.isExpress = false,
+    this.orderStatus,
+    required this.createdAt,
     required this.zone,
-    this.pricing,
-    this.items = const [],
+    required this.pricing,
   });
 
   factory Order.fromJson(Map<String, dynamic> json) {
-    return Order(
-      uuid: json['uuid'] as String,
-      orderNumber: json['order_number'] as String,
-      customerName: json['customer_name'] as String,
-      customerPhone: json['customer_phone'] as String,
-      deliveryAddress: json['delivery_address'] as String,
-      pickupAddress: json['pickup_address'] as String,
-      status: json['status'] as String,
-      isExpress: json['is_express'] as bool,
-      reservedAt: DateTime.parse(json['reserved_at'] as String),
-      barcodeValue: json['barcode_value'] as String,
-      zone: Zone.fromJson(json['zone'] as Map<String, dynamic>),
-      pricing: json['pricing'] != null
-          ? Pricing.fromJson(json['pricing'] as Map<String, dynamic>)
-          : null,
-      items: (json['items'] as List<dynamic>?)
-          ?.map((item) => OrderItem.fromJson(item as Map<String, dynamic>))
-          .toList() ??
-          [],
-    );
+    try {
+      // ✅ CRITICAL : Gérer zone et pricing null
+      final zoneData = json['zone'];
+      final pricingData = json['pricing'];
+
+      return Order(
+        orderUuid: json['order_uuid'] as String? ?? json['uuid'] as String?,
+        orderNumber: json['order_number'] as String?,
+        customerName: json['customer_name'] as String?,
+        customerPhone: json['customer_phone'] as String?,
+        customerEmail: json['customer_email'] as String?,
+        pickupAddress: json['pickup_address'] as String?,
+        deliveryAddress: json['delivery_address'] as String?,
+        isExpress: json['is_express'] == true ||
+            json['is_express'] == 1 ||
+            json['is_express'] == '1',
+        orderStatus: json['order_status'] as String?,
+        createdAt: json['created_at'] != null
+            ? DateTime.parse(json['created_at'] as String)
+            : DateTime.now(),
+        // ✅ Si zone est null, créer un objet par défaut
+        zone: zoneData != null && zoneData is Map<String, dynamic>
+            ? Zone.fromJson(zoneData)
+            : Zone.empty(),
+        // ✅ Si pricing est null, créer un objet par défaut
+        pricing: pricingData != null && pricingData is Map<String, dynamic>
+            ? Pricing.fromJson(pricingData)
+            : Pricing.empty(),
+      );
+    } catch (e, stackTrace) {
+      print('❌ [Order] Parse error: $e');
+      print('   JSON: $json');
+      print('   StackTrace: $stackTrace');
+      rethrow;
+    }
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'uuid': uuid,
+      'order_uuid': orderUuid,
       'order_number': orderNumber,
       'customer_name': customerName,
       'customer_phone': customerPhone,
-      'delivery_address': deliveryAddress,
+      'customer_email': customerEmail,
       'pickup_address': pickupAddress,
-      'status': status,
+      'delivery_address': deliveryAddress,
       'is_express': isExpress,
-      'reserved_at': reservedAt.toIso8601String(),
-      'barcode_value': barcodeValue,
+      'order_status': orderStatus,
+      'created_at': createdAt.toIso8601String(),
       'zone': zone.toJson(),
-      'pricing': pricing?.toJson(),
-      'items': items.map((item) => item.toJson()).toList(),
+      'pricing': pricing.toJson(),
     };
   }
 
-  // Helpers
-  String get statusDisplay {
-    switch (status.toLowerCase()) {
-      case 'assigned':
-        return 'Assignée';
-      case 'accepted':
-        return 'Acceptée';
-      case 'picked_up':
-        return 'Récupérée';
-      case 'in_transit':
-        return 'En transit';
-      case 'delivered':
-        return 'Livrée';
-      case 'failed':
-        return 'Échouée';
-      default:
-        return status;
-    }
-  }
-
   Order copyWith({
-    String? uuid,
+    String? orderUuid,
     String? orderNumber,
     String? customerName,
     String? customerPhone,
-    String? deliveryAddress,
+    String? customerEmail,
     String? pickupAddress,
-    String? status,
+    String? deliveryAddress,
     bool? isExpress,
-    DateTime? reservedAt,
-    String? barcodeValue,
+    String? orderStatus,
+    DateTime? createdAt,
     Zone? zone,
     Pricing? pricing,
-    List<OrderItem>? items,
   }) {
     return Order(
-      uuid: uuid ?? this.uuid,
+      orderUuid: orderUuid ?? this.orderUuid,
       orderNumber: orderNumber ?? this.orderNumber,
       customerName: customerName ?? this.customerName,
       customerPhone: customerPhone ?? this.customerPhone,
-      deliveryAddress: deliveryAddress ?? this.deliveryAddress,
+      customerEmail: customerEmail ?? this.customerEmail,
       pickupAddress: pickupAddress ?? this.pickupAddress,
-      status: status ?? this.status,
+      deliveryAddress: deliveryAddress ?? this.deliveryAddress,
       isExpress: isExpress ?? this.isExpress,
-      reservedAt: reservedAt ?? this.reservedAt,
-      barcodeValue: barcodeValue ?? this.barcodeValue,
+      orderStatus: orderStatus ?? this.orderStatus,
+      createdAt: createdAt ?? this.createdAt,
       zone: zone ?? this.zone,
       pricing: pricing ?? this.pricing,
-      items: items ?? this.items,
     );
   }
 
-  @override
-  String toString() => 'Order(orderNumber: $orderNumber, status: $status)';
+  String get uuid => orderUuid ?? '';
 
   @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is Order && other.uuid == uuid;
-  }
-
-  @override
-  int get hashCode => uuid.hashCode;
+  String toString() => 'Order(number: $orderNumber, customer: $customerName)';
 }

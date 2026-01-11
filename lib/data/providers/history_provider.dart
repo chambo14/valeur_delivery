@@ -4,7 +4,6 @@ import '../../network/config/app_logger.dart';
 import '../../network/repository/delivery_repository.dart';
 import '../models/delivery/assignment.dart';
 import '../models/delivery/pagination_meta.dart';
-
 import 'api_provider.dart';
 
 /// État pour l'historique
@@ -54,18 +53,23 @@ class HistoryState {
 
   // Stats
   int get deliveredCount => assignments
-      .where((a) => a.assignmentStatus.toLowerCase() == 'delivered' ||
-      a.assignmentStatus.toLowerCase() == 'completed')
+      .where((a) =>
+  a.assignmentStatus?.toLowerCase() == 'delivered' ||
+      a.assignmentStatus?.toLowerCase() == 'completed')
       .length;
 
   int get failedCount =>
-      assignments.where((a) => a.assignmentStatus.toLowerCase() == 'failed').length;
+      assignments
+          .where((a) => a.assignmentStatus?.toLowerCase() == 'failed')
+          .length;
 
+  // ✅ CORRIGÉ : Utiliser basePrice au lieu de priceDouble
   double get totalAmount {
     return assignments
-        .where((a) => a.assignmentStatus.toLowerCase() == 'delivered' ||
-        a.assignmentStatus.toLowerCase() == 'completed')
-        .fold<double>(0, (sum, a) => sum + (a.order.pricing?.priceDouble ?? 0));
+        .where((a) =>
+    a.assignmentStatus?.toLowerCase() == 'delivered' ||
+        a.assignmentStatus?.toLowerCase() == 'completed')
+        .fold<double>(0, (sum, a) => sum + (a.order.pricing.basePrice));
   }
 }
 

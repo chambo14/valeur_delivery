@@ -1,67 +1,59 @@
 class Pricing {
-  final String distanceKm;
-  final String vehicleType;
-  final String price;
-  final int? estimatedTimeMinutes;
+  final String? pricingUuid;
+  final String? name;
+  final double basePrice;
+  final double? expressMultiplier;
 
   Pricing({
-    required this.distanceKm,
-    required this.vehicleType,
-    required this.price,
-    this.estimatedTimeMinutes,
+    this.pricingUuid,
+    this.name,
+    this.basePrice = 0.0,
+    this.expressMultiplier,
   });
 
-  factory Pricing.fromJson(Map<String, dynamic> json) {
+  // ✅ NOUVEAU : Constructeur par défaut pour les cas où pricing est null
+  factory Pricing.empty() {
     return Pricing(
-      distanceKm: json['distance_km'] as String,
-      vehicleType: json['vehicle_type'] as String,
-      price: json['price'] as String,
-      estimatedTimeMinutes: json['estimated_time_minutes'] as int?,
+      pricingUuid: 'unknown',
+      name: 'Tarif standard',
+      basePrice: 0.0,
+      expressMultiplier: null,
     );
+  }
+
+  factory Pricing.fromJson(Map<String, dynamic> json) {
+    try {
+      return Pricing(
+        pricingUuid: json['pricing_uuid'] as String? ?? json['uuid'] as String?,
+        name: json['name'] as String?,
+        basePrice: _parseDouble(json['base_price']) ?? 0.0,
+        expressMultiplier: _parseDouble(json['express_multiplier']),
+      );
+    } catch (e, stackTrace) {
+      print('❌ [Pricing] Parse error: $e');
+      print('   JSON: $json');
+      print('   StackTrace: $stackTrace');
+      return Pricing.empty(); // ✅ Retourner pricing vide en cas d'erreur
+    }
+  }
+
+  static double? _parseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'distance_km': distanceKm,
-      'vehicle_type': vehicleType,
-      'price': price,
-      'estimated_time_minutes': estimatedTimeMinutes,
+      'pricing_uuid': pricingUuid,
+      'name': name,
+      'base_price': basePrice,
+      'express_multiplier': expressMultiplier,
     };
   }
 
-  // Helpers
-  double get distanceKmDouble => double.tryParse(distanceKm) ?? 0.0;
-  double get priceDouble => double.tryParse(price) ?? 0.0;
-  int get priceInt => priceDouble.toInt();
-
-  String get vehicleTypeDisplay {
-    switch (vehicleType.toLowerCase()) {
-      case 'voiture':
-        return 'Voiture';
-      case 'moto':
-        return 'Moto';
-      case 'velo':
-        return 'Vélo';
-      default:
-        return vehicleType;
-    }
-  }
-
-  Pricing copyWith({
-    String? distanceKm,
-    String? vehicleType,
-    String? price,
-    int? estimatedTimeMinutes,
-  }) {
-    return Pricing(
-      distanceKm: distanceKm ?? this.distanceKm,
-      vehicleType: vehicleType ?? this.vehicleType,
-      price: price ?? this.price,
-      estimatedTimeMinutes: estimatedTimeMinutes ?? this.estimatedTimeMinutes,
-    );
-  }
-
   @override
-  String toString() =>
-      'Pricing(distance: $distanceKm km, vehicle: $vehicleType, price: $price FCFA)';
+  String toString() => 'Pricing(name: $name, price: $basePrice)';
 }

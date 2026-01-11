@@ -1,45 +1,46 @@
 class Zone {
-  final String uuid;
-  final String name;
+  final String? zoneUuid;
+  final String? name;
+  final String? description;
 
   Zone({
-    required this.uuid,
-    required this.name,
+    this.zoneUuid,
+    this.name,
+    this.description,
   });
 
-  factory Zone.fromJson(Map<String, dynamic> json) {
+  // ✅ NOUVEAU : Constructeur par défaut pour les cas où zone est null
+  factory Zone.empty() {
     return Zone(
-      uuid: json['uuid'] as String,
-      name: json['name'] as String,
+      zoneUuid: 'unknown',
+      name: 'Zone inconnue',
+      description: '',
     );
+  }
+
+  factory Zone.fromJson(Map<String, dynamic> json) {
+    try {
+      return Zone(
+        zoneUuid: json['zone_uuid'] as String? ?? json['uuid'] as String?,
+        name: json['name'] as String?,
+        description: json['description'] as String?,
+      );
+    } catch (e, stackTrace) {
+      print('❌ [Zone] Parse error: $e');
+      print('   JSON: $json');
+      print('   StackTrace: $stackTrace');
+      return Zone.empty(); // ✅ Retourner zone vide en cas d'erreur
+    }
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'uuid': uuid,
+      'zone_uuid': zoneUuid,
       'name': name,
+      'description': description,
     };
   }
 
-  Zone copyWith({
-    String? uuid,
-    String? name,
-  }) {
-    return Zone(
-      uuid: uuid ?? this.uuid,
-      name: name ?? this.name,
-    );
-  }
-
   @override
-  String toString() => 'Zone(uuid: $uuid, name: $name)';
-
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is Zone && other.uuid == uuid;
-  }
-
-  @override
-  int get hashCode => uuid.hashCode;
+  String toString() => 'Zone(name: $name)';
 }

@@ -8,23 +8,24 @@ class TodayOrdersResponse {
   });
 
   factory TodayOrdersResponse.fromJson(Map<String, dynamic> json) {
-    return TodayOrdersResponse(
-      data: (json['data'] as List)
-          .map((item) => Assignment.fromJson(item))
-          .toList(),
-    );
+    try {
+      // ✅ Gérer si 'data' est null ou manquant
+      final dataList = json['data'] as List? ?? [];
+
+      return TodayOrdersResponse(
+        data: dataList
+            .map((item) => Assignment.fromJson(item as Map<String, dynamic>))
+            .toList(),
+      );
+    } catch (e, stackTrace) {
+      print('❌ [TodayOrdersResponse] Parse error: $e');
+      print('   JSON: $json');
+      print('   StackTrace: $stackTrace');
+      rethrow;
+    }
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'data': data.map((assignment) => assignment.toJson()).toList(),
-    };
-  }
-
-  // Helpers
   int get total => data.length;
-  bool get isEmpty => data.isEmpty;
-  bool get isNotEmpty => data.isNotEmpty;
 
   List<Assignment> get assignedOrders =>
       data.where((a) => a.isAssigned).toList();

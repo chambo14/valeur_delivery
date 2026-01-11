@@ -59,7 +59,7 @@ class DeliveryCard extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        assignment.order.orderNumber,
+                        assignment.order.orderNumber ?? 'N/A', // ✅ Gérer null
                         style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.bold,
@@ -81,7 +81,7 @@ class DeliveryCard extends StatelessWidget {
                         ),
                       ),
                       child: Text(
-                        assignment.statusDisplay,
+                        assignment.statusDisplay, // ✅ Déjà un String non-null
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -121,7 +121,7 @@ class DeliveryCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              assignment.order.customerName,
+                              assignment.order.customerName ?? 'Client', // ✅ Gérer null
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
@@ -130,7 +130,7 @@ class DeliveryCard extends StatelessWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              assignment.order.customerPhone,
+                              assignment.order.customerPhone ?? 'N/A', // ✅ Gérer null
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppTheme.textGrey,
@@ -163,7 +163,7 @@ class DeliveryCard extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        assignment.order.deliveryAddress,
+                        assignment.order.deliveryAddress ?? 'Adresse non disponible', // ✅ Gérer null
                         style: const TextStyle(
                           fontSize: 13,
                           color: AppTheme.textGrey,
@@ -198,7 +198,7 @@ class DeliveryCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          assignment.order.zone.name,
+                          assignment.order.zone.name ?? 'Zone', // ✅ Gérer null
                           style: const TextStyle(
                             fontSize: 12,
                             color: AppTheme.textGrey,
@@ -209,15 +209,14 @@ class DeliveryCard extends StatelessWidget {
                     ),
 
                     // Prix
-                    if (assignment.order.pricing != null)
-                      Text(
-                        '${NumberFormat('#,###', 'fr_FR').format(assignment.order.pricing!.priceInt)} F',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.primaryRed,
-                        ),
+                    Text(
+                      _formatPrice(assignment.order.pricing.basePrice), // ✅ Utiliser basePrice
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.primaryRed,
                       ),
+                    ),
                   ],
                 ),
               ],
@@ -226,5 +225,11 @@ class DeliveryCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  // ✅ Helper pour formater le prix
+  String _formatPrice(double price) {
+    final priceInt = price.toInt();
+    return '${NumberFormat('#,###', 'fr_FR').format(priceInt)} F';
   }
 }

@@ -265,6 +265,7 @@ class DeliveryService {
   }
 
   /// Récupérer les courses du jour
+  /// Récupérer les courses du jour
   Future<Either<String, TodayOrdersResponse>> getTodayOrders() async {
     try {
       AppLogger.info('📅 [DeliveryService] Récupération des courses du jour');
@@ -277,16 +278,21 @@ class DeliveryService {
         AppLogger.info('✅ [DeliveryService] Courses du jour récupérées');
 
         try {
+          // ✅ LOG LE JSON BRUT
+          AppLogger.debug('📄 JSON RAW: ${response.data}');
+
           final todayOrdersResponse = TodayOrdersResponse.fromJson(response.data);
+
           AppLogger.debug('   - Total: ${todayOrdersResponse.total}');
           AppLogger.debug('   - Assignées: ${todayOrdersResponse.assignedOrders.length}');
           AppLogger.debug('   - Acceptées: ${todayOrdersResponse.acceptedOrders.length}');
           AppLogger.debug('   - Express: ${todayOrdersResponse.expressOrders.length}');
 
           return Right(todayOrdersResponse);
-        } catch (parseError) {
+        } catch (parseError, stackTrace) {
           AppLogger.error('❌ [DeliveryService] Erreur parsing', parseError);
           AppLogger.debug('   - JSON: ${response.data}');
+          AppLogger.debug('   - StackTrace: $stackTrace');
           return Left('Erreur de parsing: ${parseError.toString()}');
         }
       } else {

@@ -156,7 +156,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
         _markers.add(
           Marker(
-            markerId: MarkerId(assignment.order.uuid),
+            markerId: MarkerId(assignment.order.uuid.toString()),
             position: LatLng(deliveryLat, deliveryLng),
             icon: BitmapDescriptor.defaultMarkerWithHue(
               _selectedDeliveryId == assignment.order.uuid
@@ -300,8 +300,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       MaterialPageRoute(
         builder: (context) => NavigationScreen(
           destination: destination,
-          destinationName: assignment.order.customerName,
-          destinationAddress: assignment.order.deliveryAddress,
+          destinationName: assignment.order.customerName.toString(),
+          destinationAddress: assignment.order.deliveryAddress.toString(),
         ),
       ),
     );

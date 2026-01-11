@@ -137,7 +137,7 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
 
         _markers.add(
           Marker(
-            markerId: MarkerId(order.order.uuid),
+            markerId: MarkerId(order.order.uuid.toString()),
             position: LatLng(lat, lng),
             icon: BitmapDescriptor.defaultMarkerWithHue(
               _selectedOrderId == order.order.uuid
@@ -150,7 +150,7 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
               title: order.order.isExpress ? '⚡ ${order.order.orderNumber}' : '📦 ${order.order.orderNumber}',
               snippet: order.order.customerName,
             ),
-            onTap: () => _selectOrder(order.order.uuid),
+            onTap: () => _selectOrder(order.order.uuid.toString()),
           ),
         );
       }
@@ -597,7 +597,7 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
 
   Widget _buildCompactOrderCard(Assignment order, bool isSelected) {
     return GestureDetector(
-      onTap: () => _selectOrder(order.order.uuid),
+      onTap: () => _selectOrder(order.order.uuid.toString()),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -639,7 +639,7 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    order.order.orderNumber,
+                    order.order.orderNumber.toString(),
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
@@ -656,7 +656,7 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    order.statusDisplay,
+                    order.statusDisplay.toString(),
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
@@ -673,7 +673,7 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    order.order.customerName,
+                    order.order.customerName.toString(),
                     style: const TextStyle(
                       fontSize: 13,
                       color: AppTheme.textDark,
@@ -690,7 +690,7 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    order.order.deliveryAddress,
+                    order.order.deliveryAddress.toString(),
                     style: const TextStyle(fontSize: 12, color: AppTheme.textGrey),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -730,7 +730,7 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
                         onPressed: () async {
                           final success = await ref
                               .read(todayOrdersProvider.notifier)
-                              .rejectOrder(order.order.uuid);
+                              .rejectOrder(order.order.uuid.toString());
                           if (success) {
                             setState(() {
                               _selectedOrderId = null;
@@ -754,7 +754,7 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
                         onPressed: () async {
                           final success = await ref
                               .read(todayOrdersProvider.notifier)
-                              .acceptOrder(order.order.uuid);
+                              .acceptOrder(order.order.uuid.toString());
                           if (success) _updateMarkers();
                         },
                         style: ElevatedButton.styleFrom(
@@ -778,8 +778,8 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
                             MaterialPageRoute(
                               builder: (context) => NavigationScreen(
                                 destination: LatLng(lat, lng),
-                                destinationName: order.order.customerName,
-                                destinationAddress: order.order.deliveryAddress,
+                                destinationName: order.order.customerName.toString(),
+                                destinationAddress: order.order.deliveryAddress.toString(),
                               ),
                             ),
                           );
