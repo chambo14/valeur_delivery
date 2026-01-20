@@ -2,6 +2,8 @@ import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
 import 'package:valeur_delivery/network/config/api_end_point.dart';
 import '../../data/models/courier/courier_profile_response.dart';
+import '../data/models/courier/courier_location_response.dart';
+import '../data/models/courier/courier_location_update.dart';
 import 'config/app_logger.dart';
 import 'config/dio.dart';
 
@@ -35,6 +37,54 @@ class CourierService {
       return Left(message);
     } catch (e) {
       AppLogger.error('❌ [CourierService] Erreur inattendue: $e');
+      return Left("Erreur inattendue: ${e.toString()}");
+    }
+  }
+
+  /// Mettre à jour la position GPS du coursier
+  Future<Either<String, CourierLocationResponse>> updateLocation(
+      String uuid, // ✅ CORRIGÉ : uuid au lieu de courierUuid
+      double lat,
+      double lng,
+      ) async {
+    try {
+      AppLogger.info('📍 [CourierService] Mise à jour position');
+      AppLogger.debug('   - Courier UUID: $uuid'); // ✅ CORRIGÉ
+      AppLogger.debug('   - Position: $lat, $lng');
+
+      final locationUpdate = CourierLocationUpdate(lat: lat, lng: lng);
+
+      final response = await dioService.post(
+        '${ApiEndPoints.courierLocationUpdate}/$uuid/location/update', // ✅ CORRIGÉ
+        locationUpdate.toJson(),
+      );
+
+      if (response.statusCode == 200) {
+        AppLogger.info('✅ [CourierService] Position mise à jour');
+
+        try {
+          final locationResponse =
+          CourierLocationResponse.fromJson(response.data);
+          AppLogger.debug('   - Message: ${locationResponse.message}');
+
+          return Right(locationResponse);
+        } catch (parseError) {
+          AppLogger.error('❌ [CourierService] Erreur parsing', parseError);
+          AppLogger.debug('   - JSON: ${response.data}');
+          return Left('Erreur de parsing: ${parseError.toString()}');
+        }
+      } else {
+        final message = response.data["message"] ?? "Erreur de mise à jour";
+        AppLogger.error('❌ [CourierService] Erreur: $message');
+        return Left(message);
+      }
+    } on DioException catch (e) {
+      final message = _handleDioError(e);
+      AppLogger.error('❌ [CourierService] Erreur Dio: $message');
+      return Left(message);
+    } catch (e, stackTrace) {
+      AppLogger.error('❌ [CourierService] Erreur inattendue: $e');
+      AppLogger.debug('   - StackTrace: $stackTrace');
       return Left("Erreur inattendue: ${e.toString()}");
     }
   }

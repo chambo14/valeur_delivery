@@ -53,16 +53,17 @@ class Assignment {
     };
   }
 
-  // Helpers
+// ... code existant
+
   String get statusDisplay {
     switch (assignmentStatus?.toLowerCase()) {
       case 'assigned':
         return 'Assignée';
       case 'accepted':
         return 'Acceptée';
-      case 'picked_up':
+      case 'picked': // ✅ CORRIGÉ
         return 'Récupérée';
-      case 'in_transit':
+      case 'delivering': // ✅ CORRIGÉ
         return 'En transit';
       case 'delivered':
         return 'Livrée';
@@ -72,20 +73,25 @@ class Assignment {
         return 'Échouée';
       case 'cancelled':
         return 'Annulée';
+      case 'returned': // ✅ AJOUTÉ
+        return 'Retournée';
       default:
-        return assignmentStatus ?? 'Inconnu'; // ✅ Valeur par défaut
+        return assignmentStatus ?? 'Inconnu';
     }
   }
 
   bool get isAssigned => assignmentStatus?.toLowerCase() == 'assigned';
   bool get isAccepted => assignmentStatus?.toLowerCase() == 'accepted';
-  bool get isPickedUp => assignmentStatus?.toLowerCase() == 'picked_up';
-  bool get isInTransit => assignmentStatus?.toLowerCase() == 'in_transit';
+  bool get isPicked => assignmentStatus?.toLowerCase() == 'picked'; // ✅ CORRIGÉ
+  bool get isDelivering => assignmentStatus?.toLowerCase() == 'delivering'; // ✅ CORRIGÉ
   bool get isDelivered => assignmentStatus?.toLowerCase() == 'delivered';
-  bool get isCompleted => assignmentStatus?.toLowerCase() == 'completed' ||
-      assignmentStatus?.toLowerCase() == 'delivered';
+  bool get isCompleted =>
+      assignmentStatus?.toLowerCase() == 'completed' ||
+          assignmentStatus?.toLowerCase() == 'delivered';
   bool get isFailed => assignmentStatus?.toLowerCase() == 'failed';
   bool get isCancelled => assignmentStatus?.toLowerCase() == 'cancelled';
+  bool get isReturned => assignmentStatus?.toLowerCase() == 'returned'; // ✅ AJOUTÉ
+  
 
   Assignment copyWith({
     String? assignmentUuid,

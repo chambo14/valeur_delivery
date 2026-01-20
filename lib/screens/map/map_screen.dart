@@ -167,7 +167,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ),
             infoWindow: InfoWindow(
               title: '📦 ${assignment.order.orderNumber}',
-              snippet: '${assignment.order.customerName} - ${assignment.order.zone.name}',
+              snippet: '${assignment.order.customerName} - ${assignment.order.zone?.name.toString()}',
             ),
             onTap: () => _showDeliveryDetails(assignment),
           ),

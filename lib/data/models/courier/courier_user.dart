@@ -29,20 +29,6 @@ class CourierUser {
     };
   }
 
-  CourierUser copyWith({
-    String? uuid,
-    String? name,
-    String? email,
-    String? phone,
-  }) {
-    return CourierUser(
-      uuid: uuid ?? this.uuid,
-      name: name ?? this.name,
-      email: email ?? this.email,
-      phone: phone ?? this.phone,
-    );
-  }
-
   @override
   String toString() => 'CourierUser(uuid: $uuid, name: $name)';
 }

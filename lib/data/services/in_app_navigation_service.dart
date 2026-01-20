@@ -3,12 +3,13 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:valeur_delivery/data/utils/key_map.dart';
 import '../../data/models/navigation/navigation_step.dart';
 import '../../network/config/app_logger.dart';
 import 'tts_service.dart';
 
 class InAppNavigationService {
-  static const String _googleApiKey = 'VOTRE_CLE_API_GOOGLE'; // ✅ À REMPLACER
+  static const String _googleApiKey = MapKey.key; // ✅ À REMPLACER
   static const double _stepCompletionThreshold = 30.0; // 30 mètres
 
   /// Obtenir les instructions détaillées

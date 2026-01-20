@@ -1,3 +1,4 @@
+import 'courier_location.dart';
 import 'courier_user.dart';
 import 'courier_zone.dart';
 
@@ -7,7 +8,7 @@ class CourierProfile {
   final String vehicleType;
   final int isActive;
   final String status;
-  final String? currentLocation;
+  final CourierLocation? currentLocation;
   final List<CourierZone> zones;
   final CourierZone? primaryZone;
   final DateTime createdAt;
@@ -27,22 +28,33 @@ class CourierProfile {
   });
 
   factory CourierProfile.fromJson(Map<String, dynamic> json) {
-    return CourierProfile(
-      uuid: json['uuid'] as String,
-      user: CourierUser.fromJson(json['user'] as Map<String, dynamic>),
-      vehicleType: json['vehicle_type'] as String,
-      isActive: json['is_active'] as int,
-      status: json['status'] as String,
-      currentLocation: json['current_location'] as String?,
-      zones: (json['zones'] as List<dynamic>)
-          .map((zone) => CourierZone.fromJson(zone as Map<String, dynamic>))
-          .toList(),
-      primaryZone: json['primary_zone'] != null
-          ? CourierZone.fromJson(json['primary_zone'] as Map<String, dynamic>)
-          : null,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
-    );
+    try {
+      return CourierProfile(
+        uuid: json['uuid'] as String,
+        user: CourierUser.fromJson(json['user'] as Map<String, dynamic>),
+        vehicleType: json['vehicle_type'] as String,
+        isActive: json['is_active'] as int,
+        status: json['status'] as String,
+        currentLocation: json['current_location'] != null
+            ? CourierLocation.fromJson(
+            json['current_location'] as Map<String, dynamic>)
+            : null,
+        zones: (json['zones'] as List<dynamic>)
+            .map((zone) => CourierZone.fromJson(zone as Map<String, dynamic>))
+            .toList(),
+        primaryZone: json['primary_zone'] != null
+            ? CourierZone.fromJson(
+            json['primary_zone'] as Map<String, dynamic>)
+            : null,
+        createdAt: DateTime.parse(json['created_at'] as String),
+        updatedAt: DateTime.parse(json['updated_at'] as String),
+      );
+    } catch (e, stackTrace) {
+      print('❌ [CourierProfile] Parse error: $e');
+      print('   JSON: $json');
+      print('   StackTrace: $stackTrace');
+      rethrow;
+    }
   }
 
   Map<String, dynamic> toJson() {
@@ -52,7 +64,7 @@ class CourierProfile {
       'vehicle_type': vehicleType,
       'is_active': isActive,
       'status': status,
-      'current_location': currentLocation,
+      'current_location': currentLocation?.toJson(),
       'zones': zones.map((zone) => zone.toJson()).toList(),
       'primary_zone': primaryZone?.toJson(),
       'created_at': createdAt.toIso8601String(),
@@ -94,13 +106,18 @@ class CourierProfile {
     return zones.map((z) => z.name).join(', ');
   }
 
+  String get locationDisplay {
+    if (currentLocation == null) return 'Position non disponible';
+    return '${currentLocation!.lat.toStringAsFixed(6)}, ${currentLocation!.lng.toStringAsFixed(6)}';
+  }
+
   CourierProfile copyWith({
     String? uuid,
     CourierUser? user,
     String? vehicleType,
     int? isActive,
     String? status,
-    String? currentLocation,
+    CourierLocation? currentLocation,
     List<CourierZone>? zones,
     CourierZone? primaryZone,
     DateTime? createdAt,
@@ -121,5 +138,7 @@ class CourierProfile {
   }
 
   @override
-  String toString() => 'CourierProfile(uuid: $uuid, user: ${user.name}, status: $status)';
+  String toString() =>
+      'CourierProfile(uuid: $uuid, user: ${user.name}, status: $status)';
 }
+

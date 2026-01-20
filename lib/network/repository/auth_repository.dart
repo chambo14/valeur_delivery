@@ -45,10 +45,12 @@ class AuthRepository {
   Future<Either<String, String>> changePassword({
     required String currentPassword,
     required String newPassword,
+    required String newConfirmPassword,
   }) async {
     return await apiService.changePassword(
       currentPassword: currentPassword,
       newPassword: newPassword,
+      newConfirmPassword: newConfirmPassword
     );
   }
 }

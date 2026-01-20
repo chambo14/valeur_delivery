@@ -1,3 +1,5 @@
+// models/pagination_meta.dart
+
 class PaginationMeta {
   final int currentPage;
   final int lastPage;
@@ -17,7 +19,6 @@ class PaginationMeta {
 
   factory PaginationMeta.fromJson(Map<String, dynamic> json) {
     return PaginationMeta(
-      // ✅ Parsing sécurisé avec valeurs par défaut
       currentPage: _parseInt(json['current_page']) ?? 1,
       lastPage: _parseInt(json['last_page']) ?? 1,
       total: _parseInt(json['total']) ?? 0,
@@ -27,7 +28,6 @@ class PaginationMeta {
     );
   }
 
-  // ✅ Méthode helper pour parser les int de manière sécurisée
   static int? _parseInt(dynamic value) {
     if (value == null) return null;
     if (value is int) return value;
@@ -47,7 +47,6 @@ class PaginationMeta {
     };
   }
 
-  // Helpers
   int get totalPages => lastPage;
   bool get hasNextPage => currentPage < lastPage;
   bool get hasPreviousPage => currentPage > 1;

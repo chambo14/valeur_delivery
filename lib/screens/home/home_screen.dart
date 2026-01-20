@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../data/providers/deliveries_provider.dart';
+import '../../data/providers/order_summary_provider.dart';
 import '../../theme/app_theme.dart';
 import '../delivery/delivery_detail_screen.dart';
 import '../history/history_screen.dart';
@@ -34,6 +35,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(deliveriesProvider.notifier).loadDeliveries();
+      ref.read(orderSummaryProvider.notifier).loadSummary();
     });
   }
 
@@ -109,9 +111,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     return RefreshIndicator(
       onRefresh: () async {
-        await ref
-            .read(deliveriesProvider.notifier)
-            .refreshDeliveries(status: _selectedFilter);
+        await Future.wait([
+          ref
+              .read(deliveriesProvider.notifier)
+              .refreshDeliveries(status: _selectedFilter),
+          ref.read(orderSummaryProvider.notifier).loadSummary(),
+        ]);
       },
       color: AppTheme.primaryRed,
       backgroundColor: AppTheme.cardLight,
@@ -158,7 +163,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                               context,
                               MaterialPageRoute(
                                 builder: (context) => DeliveryDetailScreen(
-                                  orderUuid: assignments[index].order.uuid.toString(),
+                                  orderUuid:
+                                  assignments[index].order.uuid.toString(),
                                 ),
                               ),
                             );
@@ -180,12 +186,56 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Widget _buildStatsCards() {
-    final deliveriesState = ref.watch(deliveriesProvider);
-    final totalAssignments = deliveriesState.assignments.length;
-    final assignedCount = deliveriesState.assignedOnly.length;
-    final acceptedCount = deliveriesState.acceptedOnly.length;
-    final completedCount = deliveriesState.completedOnly.length;
-    final inProgressCount = assignedCount + acceptedCount;
+    final stats = ref.watch(summaryStatsProvider);
+    final summaryState = ref.watch(orderSummaryProvider);
+
+    // Si les données sont en cours de chargement
+    if (summaryState.isLoading) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        height: 120,
+        child: const Center(
+          child: CircularProgressIndicator(color: AppTheme.primaryRed),
+        ),
+      );
+    }
+
+    // Si erreur, afficher 0 partout
+    if (summaryState.hasError) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                'En attente',
+                '0',
+                Icons.schedule_rounded,
+                AppTheme.warning,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildStatCard(
+                'En cours',
+                '0',
+                Icons.local_shipping_rounded,
+                AppTheme.info,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildStatCard(
+                'Livrées',
+                '0',
+                Icons.check_circle_rounded,
+                AppTheme.success,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -193,8 +243,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         children: [
           Expanded(
             child: _buildStatCard(
-              'Total',
-              totalAssignments.toString(),
+              'En attente',
+              stats['pending'].toString(),
+              Icons.schedule_rounded,
+              AppTheme.warning,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildStatCard(
+              'En cours',
+              stats['inProgress'].toString(),
               Icons.local_shipping_rounded,
               AppTheme.info,
             ),
@@ -203,18 +262,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           Expanded(
             child: _buildStatCard(
               'Livrées',
-              completedCount.toString(),
+              stats['delivered'].toString(),
               Icons.check_circle_rounded,
               AppTheme.success,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _buildStatCard(
-              'En cours',
-              inProgressCount.toString(),
-              Icons.timelapse_rounded,
-              AppTheme.warning,
             ),
           ),
         ],
@@ -406,8 +456,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(
-            onPressed: () =>
-                ref.read(deliveriesProvider.notifier).loadDeliveries(),
+            onPressed: () {
+              ref.read(deliveriesProvider.notifier).loadDeliveries();
+              ref.read(orderSummaryProvider.notifier).loadSummary();
+            },
             icon: const Icon(Icons.refresh_rounded),
             label: const Text('Réessayer'),
             style: ElevatedButton.styleFrom(
@@ -524,7 +576,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       child: SafeArea(
         child: Container(
           height: 70,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), // ✅ Réduit de 8 à 6
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -576,7 +628,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         },
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 6), // ✅ Réduit de 8 à 6
+          padding: const EdgeInsets.symmetric(vertical: 6),
           decoration: BoxDecoration(
             color: isSelected
                 ? AppTheme.primaryRed.withOpacity(0.1)
@@ -590,9 +642,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               Icon(
                 isSelected ? activeIcon : inactiveIcon,
                 color: isSelected ? AppTheme.primaryRed : AppTheme.textGrey,
-                size: 20, // ✅ Réduit de 21 à 20
+                size: 20,
               ),
-              const SizedBox(height: 3), // ✅ Augmenté de 2 à 3
+              const SizedBox(height: 3),
               Text(
                 label,
                 style: TextStyle(

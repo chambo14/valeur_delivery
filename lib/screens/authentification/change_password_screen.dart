@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../data/providers/change_password_provider.dart';
 import '../../theme/app_theme.dart';
 
-class ChangePasswordScreen extends StatefulWidget {
+class ChangePasswordScreen extends ConsumerStatefulWidget {
   const ChangePasswordScreen({super.key});
 
   @override
-  State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
+  ConsumerState<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
 }
 
-class _ChangePasswordScreenState extends State<ChangePasswordScreen> with SingleTickerProviderStateMixin {
+class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
@@ -17,7 +21,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> with Single
   bool _obscureCurrentPassword = true;
   bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
-  bool _isLoading = false;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -83,36 +86,38 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> with Single
     return 'Fort';
   }
 
+  // ✅ CORRIGÉ : Utiliser le provider pour changer le mot de passe
   Future<void> _handleChangePassword() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
+    if (!_formKey.currentState!.validate()) return;
 
-      await Future.delayed(const Duration(seconds: 2));
+    final success = await ref.read(changePasswordProvider.notifier).changePassword(
+      currentPassword: _currentPasswordController.text.trim(),
+      newPassword: _newPasswordController.text.trim(),
+      confirmPassword: _confirmPasswordController.text.trim(),
+    );
 
-      if (mounted) {
-        setState(() => _isLoading = false);
+    if (!mounted) return;
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: const [
-                Icon(Icons.check_circle_rounded, color: Colors.white),
-                SizedBox(width: 12),
-                Expanded(child: Text('Mot de passe modifié avec succès')),
-              ],
-            ),
-            backgroundColor: AppTheme.success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            margin: const EdgeInsets.all(16),
-            duration: const Duration(seconds: 3),
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle_rounded, color: Colors.white),
+              SizedBox(width: 12),
+              Expanded(child: Text('Mot de passe modifié avec succès')),
+            ],
           ),
-        );
+          backgroundColor: AppTheme.success,
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 3),
+        ),
+      );
 
-        Navigator.pop(context);
-      }
+      // Retourner à l'écran précédent
+      Navigator.pop(context);
+    } else {
+      // L'erreur sera affichée via le listener ci-dessous
     }
   }
 
@@ -141,6 +146,30 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> with Single
 
   @override
   Widget build(BuildContext context) {
+    // ✅ Écouter l'état du provider
+    final changePasswordState = ref.watch(changePasswordProvider);
+    final isLoading = changePasswordState.isLoading;
+
+    // ✅ Écouter les erreurs
+    ref.listen<ChangePasswordState>(changePasswordProvider, (previous, next) {
+      if (next.errorMessage != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_rounded, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(child: Text(next.errorMessage!)),
+              ],
+            ),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    });
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
@@ -194,7 +223,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> with Single
                             ),
                           ],
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.lock_rounded,
                           size: 56,
                           color: AppTheme.primaryRed,
@@ -304,7 +333,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> with Single
 
                     const SizedBox(height: 24),
 
-                    // Conseils de sécurité modernisés
+                    // Conseils de sécurité
                     _buildSecurityTipsCard(),
 
                     const SizedBox(height: 32),
@@ -313,7 +342,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> with Single
                     Container(
                       height: 56,
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
+                        gradient: const LinearGradient(
                           colors: [
                             AppTheme.primaryRed,
                             AppTheme.accentRed,
@@ -329,7 +358,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> with Single
                         ],
                       ),
                       child: ElevatedButton(
-                        onPressed: _isLoading ? null : _handleChangePassword,
+                        onPressed: isLoading ? null : _handleChangePassword,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.transparent,
                           shadowColor: Colors.transparent,
@@ -337,7 +366,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> with Single
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        child: _isLoading
+                        child: isLoading
                             ? const SizedBox(
                           height: 24,
                           width: 24,
@@ -346,9 +375,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> with Single
                             valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
-                            : Row(
+                            : const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
+                          children: [
                             Icon(Icons.shield_rounded, size: 20),
                             SizedBox(width: 8),
                             Text(
@@ -367,11 +396,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> with Single
 
                     // Bouton annuler
                     TextButton(
-                      onPressed: _isLoading ? null : () => Navigator.pop(context),
+                      onPressed: isLoading ? null : () => Navigator.pop(context),
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      child: Text(
+                      child: const Text(
                         'Annuler',
                         style: TextStyle(
                           fontSize: 16,
@@ -493,39 +522,34 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> with Single
     final color = _getStrengthColor(strength);
     final text = _getStrengthText(strength);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: LinearProgressIndicator(
-                  value: strength,
-                  backgroundColor: AppTheme.cardGrey,
-                  valueColor: AlwaysStoppedAnimation<Color>(color),
-                  minHeight: 6,
-                ),
-              ),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: strength,
+              backgroundColor: AppTheme.cardGrey,
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+              minHeight: 6,
             ),
-            const SizedBox(width: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                text,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: color,
-                ),
-              ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
             ),
-          ],
+          ),
         ),
       ],
     );
@@ -574,10 +598,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> with Single
                 ),
               ),
               const SizedBox(width: 12),
-              const Text(
+               Text(
                 'Conseils pour un mot de passe fort',
-                style: TextStyle(
-                  fontSize: 15,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
                   fontWeight: FontWeight.bold,
                   color: AppTheme.textDark,
                 ),

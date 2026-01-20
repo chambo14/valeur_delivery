@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+
 import '../../data/models/navigation/navigation_step.dart';
+import '../../data/providers/courier_location_provider.dart';
 import '../../data/services/in_app_navigation_service.dart';
 import '../../data/services/location_service.dart';
 import '../../data/services/navigation_service.dart';
@@ -10,7 +13,7 @@ import '../../data/services/tts_service.dart';
 import '../../network/config/app_logger.dart';
 import '../../theme/app_theme.dart';
 
-class NavigationScreen extends StatefulWidget {
+class NavigationScreen extends ConsumerStatefulWidget {
   final LatLng destination;
   final String destinationName;
   final String destinationAddress;
@@ -23,19 +26,21 @@ class NavigationScreen extends StatefulWidget {
   });
 
   @override
-  State<NavigationScreen> createState() => _NavigationScreenState();
+  ConsumerState<NavigationScreen> createState() => _NavigationScreenState();
 }
 
-class _NavigationScreenState extends State<NavigationScreen> {
+class _NavigationScreenState extends ConsumerState<NavigationScreen> {
   GoogleMapController? _mapController;
   Position? _currentPosition;
-  StreamSubscription<Position>? _positionStreamSubscription;
+  StreamSubscription<Position>? _positionSub;
 
   List<NavigationStep> _steps = [];
   int _currentStepIndex = 0;
+
   bool _isLoading = true;
   bool _hasArrived = false;
   bool _isMuted = false;
+  bool _hasAnnouncedFirstStep = false;
 
   final Set<Marker> _markers = {};
   final Set<Polyline> _polylines = {};
@@ -45,189 +50,162 @@ class _NavigationScreenState extends State<NavigationScreen> {
   String _estimatedTime = '';
   double _currentBearing = 0;
 
+  DateTime? _lastRecalculation;
+
   @override
   void initState() {
     super.initState();
-    _initializeNavigation();
+    _initNavigation();
+
+    ref.read(courierLocationProvider.notifier).startLocationSharing(
+      intervalSeconds: 15,
+    );
   }
 
-  Future<void> _initializeNavigation() async {
-    // 1. Obtenir position actuelle
+  // ───────────────── INIT ─────────────────
+
+  Future<void> _initNavigation() async {
     final position = await LocationService.getCurrentPosition();
     if (position == null) {
-      _showError('Impossible d\'obtenir votre position');
+      _showError('Impossible d’obtenir la position GPS');
       return;
     }
 
-    setState(() => _currentPosition = position);
+    _currentPosition = position;
 
-    // 2. Calculer l'itinéraire
     final origin = LatLng(position.latitude, position.longitude);
+
+    // Étapes détaillées
     final steps = await InAppNavigationService.getDetailedDirections(
       origin: origin,
       destination: widget.destination,
     );
 
     if (steps == null || steps.isEmpty) {
-      _showError('Impossible de calculer l\'itinéraire');
+      _showError('Impossible de calculer l’itinéraire');
       return;
     }
 
-    // 3. Obtenir la polyline
+    // Polyline + infos globales
     final directions = await NavigationService.getDirections(
       origin: origin,
       destination: widget.destination,
     );
 
-    if (directions != null) {
-      final polylinePoints = NavigationService.decodePolyline(
-        directions['polyline'],
+    if (directions == null) {
+      _showError('Erreur lors du chargement de la route');
+      return;
+    }
+
+    final polylinePoints =
+    NavigationService.decodePolyline(directions['polyline']);
+
+    setState(() {
+      _steps = steps;
+      _isLoading = false;
+      _totalDistance = directions['distanceValue'].toDouble();
+      _remainingDistance = _totalDistance;
+      _estimatedTime = directions['duration'];
+
+      _polylines.add(
+        Polyline(
+          polylineId: const PolylineId('route'),
+          points: polylinePoints,
+          color: AppTheme.primaryRed,
+          width: 6,
+          startCap: Cap.roundCap,
+          endCap: Cap.roundCap,
+        ),
       );
 
-      setState(() {
-        _steps = steps;
-        _isLoading = false;
-        _totalDistance = directions['distanceValue'].toDouble();
-        _remainingDistance = _totalDistance;
-        _estimatedTime = directions['duration'];
-
-        // Polyline
-        _polylines.add(
-          Polyline(
-            polylineId: const PolylineId('route'),
-            points: polylinePoints,
-            color: AppTheme.primaryRed,
-            width: 6,
-            startCap: Cap.roundCap,
-            endCap: Cap.roundCap,
+      _markers.add(
+        Marker(
+          markerId: const MarkerId('destination'),
+          position: widget.destination,
+          infoWindow: InfoWindow(
+            title: widget.destinationName,
+            snippet: widget.destinationAddress,
           ),
-        );
+        ),
+      );
+    });
 
-        // Markers
-        _markers.add(
-          Marker(
-            markerId: const MarkerId('start'),
-            position: origin,
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-              BitmapDescriptor.hueGreen,
-            ),
-          ),
-        );
-        _markers.add(
-          Marker(
-            markerId: const MarkerId('destination'),
-            position: widget.destination,
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-              BitmapDescriptor.hueRed,
-            ),
-            infoWindow: InfoWindow(
-              title: widget.destinationName,
-              snippet: widget.destinationAddress,
-            ),
-          ),
-        );
-      });
+    _startTracking();
 
-      // 4. Démarrer le suivi
-      _startPositionTracking();
-
-      // 5. Annoncer première instruction
-      // Dans _initializeNavigation(), remplacez la partie TTS par:
-
-// 5. Annoncer première instruction (si TTS disponible)
-      if (_steps.isNotEmpty && !_isMuted) {
-        await TtsService.speak('Navigation démarrée vers ${widget.destinationName}');
-        await Future.delayed(const Duration(seconds: 2));
-        await InAppNavigationService.announceInstruction(_steps[0], 0);
-      }
-
-// Si TTS non disponible, afficher un message
-      if (!TtsService.isAvailable && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.volume_off_rounded, color: Colors.white),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text('Guidage vocal non disponible (mode silencieux)'),
-                ),
-              ],
-            ),
-            backgroundColor: AppTheme.warning,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+    // TTS initial
+    if (!_isMuted && !_hasAnnouncedFirstStep) {
+      _hasAnnouncedFirstStep = true;
+      await TtsService.speak(
+        'Navigation démarrée vers ${widget.destinationName}',
+      );
+      await Future.delayed(const Duration(seconds: 2));
+      await InAppNavigationService.announceInstruction(_steps[0], 0);
     }
   }
 
-  void _startPositionTracking() {
-    _positionStreamSubscription = LocationService.getPositionStream().listen(
-          (Position position) {
-        setState(() => _currentPosition = position);
+  // ───────────────── TRACKING ─────────────────
 
-        _updateNavigation(position);
+  void _startTracking() {
+    _positionSub = LocationService.getPositionStream().listen(
+          (pos) {
+        _currentPosition = pos;
+        _updateNavigation(pos);
       },
-      onError: (error) {
-        AppLogger.error('❌ [NavigationScreen] Erreur position', error);
+      onError: (e) {
+        AppLogger.error('❌ Erreur GPS navigation', e);
       },
     );
   }
 
-  void _updateNavigation(Position position) {
+  void _updateNavigation(Position pos) {
     if (_steps.isEmpty || _hasArrived) return;
 
-    final currentLatLng = LatLng(position.latitude, position.longitude);
+    final currentLatLng = LatLng(pos.latitude, pos.longitude);
 
-    // 1. Calculer distance restante à destination
-    final distanceToDestination = InAppNavigationService.calculateDistance(
+    // Distance restante réaliste
+    double remaining = 0;
+    for (int i = _currentStepIndex; i < _steps.length; i++) {
+      remaining += _steps[i].distanceValue;
+    }
+    _remainingDistance = remaining;
+
+    // Arrivée
+    if (InAppNavigationService.calculateDistance(
       currentLatLng,
       widget.destination,
-    );
-
-    setState(() {
-      _remainingDistance = distanceToDestination;
-    });
-
-    // 2. Vérifier si arrivé
-    if (distanceToDestination < 20) {
+    ) <
+        20) {
       _onArrival();
       return;
     }
 
-    // 3. Trouver l'étape actuelle
-    final newStepIndex = InAppNavigationService.findCurrentStepIndex(
-      position,
+    // Étape courante
+    final newIndex = InAppNavigationService.findCurrentStepIndex(
+      pos,
       _steps,
       _currentStepIndex,
     );
 
-    // 4. Si nouvelle étape, annoncer
-    if (newStepIndex != _currentStepIndex && newStepIndex < _steps.length) {
-      setState(() => _currentStepIndex = newStepIndex);
+    if (newIndex != _currentStepIndex && newIndex < _steps.length) {
+      _currentStepIndex = newIndex;
 
       if (!_isMuted) {
-        final step = _steps[newStepIndex];
-        final distanceToStep = InAppNavigationService.calculateDistance(
+        final step = _steps[newIndex];
+        final dist = InAppNavigationService.calculateDistance(
           currentLatLng,
           step.startLocation,
         );
-        InAppNavigationService.announceInstruction(step, distanceToStep);
+        InAppNavigationService.announceInstruction(step, dist);
       }
     }
 
-    // 5. Calculer bearing et rotation caméra
-    if (_currentStepIndex < _steps.length) {
-      final nextPoint = _steps[_currentStepIndex].endLocation;
-      final bearing = InAppNavigationService.calculateBearing(
-        currentLatLng,
-        nextPoint,
-      );
+    // Bearing & caméra (fluide)
+    final target = _steps[_currentStepIndex].endLocation;
+    final bearing =
+    InAppNavigationService.calculateBearing(currentLatLng, target);
 
-      setState(() => _currentBearing = bearing);
-
-      // Rotation de la caméra
+    if ((bearing - _currentBearing).abs() > 10) {
+      _currentBearing = bearing;
       _mapController?.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
@@ -240,62 +218,60 @@ class _NavigationScreenState extends State<NavigationScreen> {
       );
     }
 
-    // 6. Vérifier déviation
+    // Déviation (avec cooldown)
     if (InAppNavigationService.hasDeviatedFromRoute(
-      position,
+      pos,
       _steps,
       _currentStepIndex,
     )) {
-      _recalculateRoute();
+      if (_lastRecalculation == null ||
+          DateTime.now().difference(_lastRecalculation!).inSeconds > 20) {
+        _lastRecalculation = DateTime.now();
+        _recalculateRoute();
+      }
     }
+
+    setState(() {});
   }
 
+  // ───────────────── RECALCUL ─────────────────
+
   Future<void> _recalculateRoute() async {
-    if (_currentPosition == null) return;
-
-    AppLogger.info('🔄 [NavigationScreen] Recalcul itinéraire');
-
     if (!_isMuted) {
-      await TtsService.speak('Recalcul de l\'itinéraire');
+      await TtsService.speak('Recalcul de l’itinéraire');
     }
 
-    // Réinitialiser et recalculer
     setState(() {
       _isLoading = true;
       _steps.clear();
       _polylines.clear();
       _currentStepIndex = 0;
+      _hasAnnouncedFirstStep = false;
     });
 
-    await _initializeNavigation();
+    await _initNavigation();
   }
+
+  // ───────────────── ARRIVÉE ─────────────────
 
   void _onArrival() {
     if (_hasArrived) return;
 
-    setState(() => _hasArrived = true);
-
-    _positionStreamSubscription?.cancel();
+    _hasArrived = true;
+    _positionSub?.cancel();
 
     if (!_isMuted) {
       TtsService.speak('Vous êtes arrivé à destination');
     }
 
-    // Dialog d'arrivée
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 32),
-            SizedBox(width: 12),
-            Text('Arrivée !'),
-          ],
-        ),
+        title: const Text('Arrivée'),
         content: Text('Vous êtes arrivé à ${widget.destinationName}'),
         actions: [
           ElevatedButton(
@@ -305,7 +281,6 @@ class _NavigationScreenState extends State<NavigationScreen> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.success,
-              foregroundColor: Colors.white,
             ),
             child: const Text('Terminer'),
           ),
@@ -314,12 +289,114 @@ class _NavigationScreenState extends State<NavigationScreen> {
     );
   }
 
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppTheme.error,
+  // ───────────────── UI ─────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: AppTheme.primaryRed),
+        ),
+      );
+    }
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          GoogleMap(
+            onMapCreated: (c) => _mapController = c,
+            initialCameraPosition: CameraPosition(
+              target: LatLng(
+                _currentPosition!.latitude,
+                _currentPosition!.longitude,
+              ),
+              zoom: 18,
+              tilt: 45,
+            ),
+            polylines: _polylines,
+            markers: _markers,
+            myLocationEnabled: true,
+            zoomControlsEnabled: false,
+            compassEnabled: false,
+          ),
+
+          Positioned(top: 50, left: 16, right: 16, child: _instructionCard()),
+          Positioned(bottom: 0, left: 0, right: 0, child: _bottomPanel()),
+        ],
       ),
+    );
+  }
+
+  Widget _instructionCard() {
+    final step = _steps[_currentStepIndex];
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.cardLight,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        step.instruction,
+        style: const TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _bottomPanel() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.cardLight,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SafeArea(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _info(Icons.straighten_rounded,
+                InAppNavigationService.formatDistance(_remainingDistance)),
+            _info(Icons.access_time_rounded, _estimatedTime),
+            IconButton(
+              onPressed: () {
+                setState(() => _isMuted = !_isMuted);
+                if (_isMuted) TtsService.stop();
+              },
+              icon: Icon(
+                _isMuted
+                    ? Icons.volume_off_rounded
+                    : Icons.volume_up_rounded,
+                color: AppTheme.primaryRed,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _info(IconData icon, String value) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 20),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ],
+    );
+  }
+
+  // ───────────────── CLEANUP ─────────────────
+
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: AppTheme.error),
     );
     Future.delayed(const Duration(seconds: 2), () {
       Navigator.pop(context);
@@ -327,324 +404,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: _isLoading
-          ? const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: AppTheme.primaryRed),
-            SizedBox(height: 16),
-            Text(
-              'Calcul de l\'itinéraire...',
-              style: TextStyle(color: AppTheme.textGrey),
-            ),
-          ],
-        ),
-      )
-          : Stack(
-        children: [
-          // Carte
-          GoogleMap(
-            onMapCreated: (controller) => _mapController = controller,
-            initialCameraPosition: CameraPosition(
-              target: _currentPosition != null
-                  ? LatLng(
-                _currentPosition!.latitude,
-                _currentPosition!.longitude,
-              )
-                  : widget.destination,
-              zoom: 18,
-              tilt: 45,
-            ),
-            markers: _markers,
-            polylines: _polylines,
-            myLocationEnabled: true,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
-            compassEnabled: false,
-            rotateGesturesEnabled: true,
-            scrollGesturesEnabled: true,
-            tiltGesturesEnabled: true,
-            zoomGesturesEnabled: true,
-          ),
-
-          // Instructions en haut
-          Positioned(
-            top: 50,
-            left: 16,
-            right: 16,
-            child: _buildInstructionCard(),
-          ),
-
-          // Infos en bas
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: _buildBottomInfo(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInstructionCard() {
-    if (_currentStepIndex >= _steps.length) {
-      return const SizedBox.shrink();
-    }
-
-    final step = _steps[_currentStepIndex];
-    final distanceToStep = _currentPosition != null
-        ? InAppNavigationService.calculateDistance(
-      LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-      step.endLocation,
-    )
-        : 0.0;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppTheme.cardLight,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              // Icône de manœuvre
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryRed.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(
-                  child: Text(
-                    step.maneuverIcon,
-                    style: const TextStyle(
-                      fontSize: 32,
-                      color: AppTheme.primaryRed,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-
-              // Distance
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      InAppNavigationService.formatDistance(distanceToStep),
-                      style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.primaryRed,
-                      ),
-                    ),
-                    Text(
-                      step.distance,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textGrey,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Instruction
-          Text(
-            step.instruction,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.textDark,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomInfo() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppTheme.cardLight,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Barre de progression
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildInfoItem(
-                  Icons.straighten_rounded,
-                  InAppNavigationService.formatDistance(_remainingDistance),
-                  'Restant',
-                ),
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: AppTheme.textGrey.withOpacity(0.3),
-                ),
-                _buildInfoItem(
-                  Icons.access_time_rounded,
-                  _estimatedTime,
-                  'Arrivée',
-                ),
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: AppTheme.textGrey.withOpacity(0.3),
-                ),
-                _buildInfoItem(
-                  Icons.navigation_rounded,
-                  '${_currentBearing.toInt()}°',
-                  'Direction',
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Boutons
-            Row(
-              children: [
-                // Mute/Unmute
-                IconButton(
-                  onPressed: () {
-                    setState(() => _isMuted = !_isMuted);
-                    if (_isMuted) {
-                      TtsService.stop();
-                    }
-                  },
-                  icon: Icon(
-                    _isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                    color: AppTheme.primaryRed,
-                  ),
-                  style: IconButton.styleFrom(
-                    backgroundColor: AppTheme.primaryRed.withOpacity(0.1),
-                  ),
-                ),
-                const SizedBox(width: 12),
-
-                // Recalculer
-                IconButton(
-                  onPressed: _recalculateRoute,
-                  icon: const Icon(
-                    Icons.refresh_rounded,
-                    color: AppTheme.info,
-                  ),
-                  style: IconButton.styleFrom(
-                    backgroundColor: AppTheme.info.withOpacity(0.1),
-                  ),
-                ),
-                const SizedBox(width: 12),
-
-                // Arrêter navigation
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Arrêter la navigation'),
-                          content: const Text(
-                            'Êtes-vous sûr de vouloir arrêter la navigation ?',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Non'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                Navigator.pop(context);
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.error,
-                              ),
-                              child: const Text('Oui'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.stop_rounded),
-                    label: const Text('Arrêter'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.error,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoItem(IconData icon, String value, String label) {
-    return Column(
-      children: [
-        Icon(icon, color: AppTheme.textGrey, size: 20),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.textDark,
-          ),
-        ),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11,
-            color: AppTheme.textGrey,
-          ),
-        ),
-      ],
-    );
-  }
-
-  @override
   void dispose() {
-    _positionStreamSubscription?.cancel();
+    _positionSub?.cancel();
+    ref.read(courierLocationProvider.notifier).stopLocationSharing();
     TtsService.dispose();
     _mapController?.dispose();
     super.dispose();

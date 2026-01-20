@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import '../../network/config/app_logger.dart';
 import '../../network/repository/delivery_repository.dart';
 import '../models/delivery/assignment.dart';
+import '../models/delivery/location_data.dart';
 import '../models/delivery/pagination_meta.dart';
 import 'api_provider.dart';
 
@@ -227,6 +228,47 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
     );
   }
 
+
+  /// Mettre à jour le statut d'une commande avec localisation
+  Future<bool> updateOrderStatus(
+      String orderUuid,
+      String status, {
+        String? notes,
+        LocationData? location,
+      }) async {
+    AppLogger.info('🔄 [DeliveriesNotifier] Mise à jour statut: $orderUuid → $status');
+
+    final result = await _deliveryRepository.updateOrderStatus(
+      orderUuid,
+      status,
+      notes: notes,
+      location: location,
+    );
+
+    return result.fold(
+          (error) {
+        AppLogger.error('❌ [DeliveriesNotifier] Erreur MAJ statut: $error');
+        state = state.copyWith(errorMessage: error);
+        return false;
+      },
+          (response) {
+        AppLogger.info('✅ [DeliveriesNotifier] Statut mis à jour');
+        AppLogger.debug('   - Message: ${response.message}');
+
+        // Mettre à jour l'assignment localement
+        final updatedAssignments = state.assignments.map((assignment) {
+          if (assignment.order.uuid == orderUuid) {
+            // Remplacer par les nouvelles données
+            return response.data;
+          }
+          return assignment;
+        }).toList();
+
+        state = state.copyWith(assignments: updatedAssignments);
+        return true;
+      },
+    );
+  }
   /// Mettre à jour le statut d'une livraison (✅ CORRIGÉ)
   Future<bool> updateAssignmentStatus(
       String orderUuid,

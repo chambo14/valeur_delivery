@@ -3,7 +3,11 @@ import 'package:dio/dio.dart';
 import 'package:valeur_delivery/network/config/api_end_point.dart';
 import '../data/models/delivery/assignment_detail_response.dart';
 import '../data/models/delivery/deliveries_response.dart';
+import '../data/models/delivery/location_data.dart';
+import '../data/models/delivery/order_summary.dart';
 import '../data/models/delivery/today_orders_response.dart';
+import '../data/models/delivery/update_status_request.dart';
+import '../data/models/delivery/update_status_response.dart';
 import 'config/app_logger.dart';
 import 'config/dio.dart';
 
@@ -58,21 +62,38 @@ class DeliveryService {
     }
   }
 
+  // delivery_service.dart
+
   Future<Either<String, bool>> acceptAssignment(
       String orderUuid, {
         String? notes,
+        double? latitude,
+        double? longitude,
       }) async {
     try {
       AppLogger.info('✅ [DeliveryService] Acceptation de la livraison');
       AppLogger.debug('   - Order UUID: $orderUuid');
       if (notes != null) AppLogger.debug('   - Notes: $notes');
+      if (latitude != null && longitude != null) {
+        AppLogger.debug('   - Location: $latitude, $longitude');
+      }
+
+      final Map<String, dynamic> body = {
+        'status': 'accepted',
+        'notes': notes ?? '',
+      };
+
+      // Ajouter la localisation si disponible
+      if (latitude != null && longitude != null) {
+        body['location'] = {
+          'lat': latitude,
+          'lng': longitude,
+        };
+      }
 
       final response = await dioService.post(
         '${ApiEndPoints.acceptOrRejectOrder}/$orderUuid/status',
-        {
-          'status': 'accepted',
-          'notes': notes ?? '',
-        },
+        body,
       );
 
       if (response.statusCode == 200) {
@@ -88,22 +109,32 @@ class DeliveryService {
     }
   }
 
-  /// Refuser une livraison
   Future<Either<String, bool>> rejectAssignment(
       String orderUuid, {
         String? notes,
+        double? latitude,
+        double? longitude,
       }) async {
     try {
       AppLogger.info('❌ [DeliveryService] Refus de la livraison');
       AppLogger.debug('   - Order UUID: $orderUuid');
       if (notes != null) AppLogger.debug('   - Notes: $notes');
 
+      final Map<String, dynamic> body = {
+        'status': 'cancelled',
+        'notes': notes ?? '',
+      };
+
+      if (latitude != null && longitude != null) {
+        body['location'] = {
+          'lat': latitude,
+          'lng': longitude,
+        };
+      }
+
       final response = await dioService.post(
         '${ApiEndPoints.acceptOrRejectOrder}/$orderUuid/status',
-        {
-          'status': 'cancelled',
-          'notes': notes ?? '',
-        },
+        body,
       );
 
       if (response.statusCode == 200) {
@@ -118,6 +149,8 @@ class DeliveryService {
       return Left("Erreur inattendue: ${e.toString()}");
     }
   }
+
+
 
   /// Mettre à jour le statut d'une livraison
   Future<Either<String, bool>> updateAssignmentStatus(
@@ -297,6 +330,106 @@ class DeliveryService {
         }
       } else {
         final message = response.data["message"] ?? "Erreur de récupération";
+        AppLogger.error('❌ [DeliveryService] Erreur: $message');
+        return Left(message);
+      }
+    } on DioException catch (e) {
+      final message = _handleDioError(e);
+      AppLogger.error('❌ [DeliveryService] Erreur Dio: $message');
+      return Left(message);
+    } catch (e, stackTrace) {
+      AppLogger.error('❌ [DeliveryService] Erreur inattendue: $e');
+      AppLogger.debug('   - StackTrace: $stackTrace');
+      return Left("Erreur inattendue: ${e.toString()}");
+    }
+  }
+
+  /// Récupérer le résumé des commandes
+  Future<Either<String, OrderSummaryResponse>> getOrdersSummary() async {
+    try {
+      AppLogger.info('📊 [DeliveryService] Récupération du résumé');
+
+      final response = await dioService.get(
+        ApiEndPoints.ordersSummary,
+      );
+
+      if (response.statusCode == 200) {
+        AppLogger.info('✅ [DeliveryService] Résumé récupéré');
+
+        try {
+          final summaryResponse = OrderSummaryResponse.fromJson(response.data);
+
+          AppLogger.debug('   - Pending: ${summaryResponse.data.pending}');
+          AppLogger.debug('   - In Progress: ${summaryResponse.data.inProgress}');
+          AppLogger.debug('   - Delivered: ${summaryResponse.data.delivered}');
+          AppLogger.debug('   - Returned: ${summaryResponse.data.returned}');
+          AppLogger.debug('   - Canceled: ${summaryResponse.data.canceled}');
+          AppLogger.debug('   - Total: ${summaryResponse.data.total}');
+
+          return Right(summaryResponse);
+        } catch (parseError) {
+          AppLogger.error('❌ [DeliveryService] Erreur parsing', parseError);
+          AppLogger.debug('   - JSON: ${response.data}');
+          return Left('Erreur de parsing: ${parseError.toString()}');
+        }
+      } else {
+        final message = response.data["message"] ?? "Erreur de récupération";
+        AppLogger.error('❌ [DeliveryService] Erreur: $message');
+        return Left(message);
+      }
+    } on DioException catch (e) {
+      final message = _handleDioError(e);
+      AppLogger.error('❌ [DeliveryService] Erreur Dio: $message');
+      return Left(message);
+    } catch (e, stackTrace) {
+      AppLogger.error('❌ [DeliveryService] Erreur inattendue: $e');
+      AppLogger.debug('   - StackTrace: $stackTrace');
+      return Left("Erreur inattendue: ${e.toString()}");
+    }
+  }
+  /// Mettre à jour le statut d'une commande avec localisation
+  Future<Either<String, UpdateStatusResponse>> updateOrderStatus(
+      String orderUuid,
+      String status, {
+        String? notes,
+        LocationData? location,
+      }) async {
+    try {
+      AppLogger.info('🔄 [DeliveryService] Mise à jour du statut');
+      AppLogger.debug('   - Order UUID: $orderUuid');
+      AppLogger.debug('   - Status: $status');
+      if (notes != null) AppLogger.debug('   - Notes: $notes');
+      if (location != null) AppLogger.debug('   - Location: ${location.lat}, ${location.lng}');
+
+      final request = UpdateStatusRequest(
+        status: status,
+        notes: notes,
+        location: location,
+      );
+
+      AppLogger.debug('📤 Request body: ${request.toJson()}');
+
+      final response = await dioService.patch(
+        '${ApiEndPoints.acceptOrRejectOrder}/$orderUuid/status',
+        request.toJson(),
+      );
+
+      if (response.statusCode == 200) {
+        AppLogger.info('✅ [DeliveryService] Statut mis à jour');
+
+        try {
+          final updateResponse = UpdateStatusResponse.fromJson(response.data);
+          AppLogger.debug('   - New status: ${updateResponse.data.assignmentStatus}');
+          AppLogger.debug('   - Message: ${updateResponse.message}');
+
+          return Right(updateResponse);
+        } catch (parseError) {
+          AppLogger.error('❌ [DeliveryService] Erreur parsing', parseError);
+          AppLogger.debug('   - JSON: ${response.data}');
+          return Left('Erreur de parsing: ${parseError.toString()}');
+        }
+      } else {
+        final message = response.data["message"] ?? "Erreur de mise à jour";
         AppLogger.error('❌ [DeliveryService] Erreur: $message');
         return Left(message);
       }

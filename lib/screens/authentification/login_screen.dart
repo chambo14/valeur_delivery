@@ -245,26 +245,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         },
                       ),
 
-                      const SizedBox(height: 12),
-
-                      // Mot de passe oublié
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: isLoading
-                              ? null
-                              : () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                const ForgotPasswordScreen(),
-                              ),
-                            );
-                          },
-                          child: const Text('Mot de passe oublié ?'),
-                        ),
-                      ),
+                      // const SizedBox(height: 12),
+                      //
+                      // // Mot de passe oublié
+                      // Align(
+                      //   alignment: Alignment.centerRight,
+                      //   child: TextButton(
+                      //     onPressed: isLoading
+                      //         ? null
+                      //         : () {
+                      //       Navigator.push(
+                      //         context,
+                      //         MaterialPageRoute(
+                      //           builder: (context) =>
+                      //           const ForgotPasswordScreen(),
+                      //         ),
+                      //       );
+                      //     },
+                      //     child: const Text('Mot de passe oublié ?'),
+                      //   ),
+                      // ),
 
                       const SizedBox(height: 30),
 

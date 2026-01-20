@@ -1,7 +1,10 @@
 import 'package:dartz/dartz.dart';
 import '../../data/models/delivery/assignment_detail_response.dart';
 import '../../data/models/delivery/deliveries_response.dart';
+import '../../data/models/delivery/location_data.dart';
+import '../../data/models/delivery/order_summary.dart';
 import '../../data/models/delivery/today_orders_response.dart';
+import '../../data/models/delivery/update_status_response.dart';
 import '../delivery_service.dart';
 
 
@@ -25,18 +28,34 @@ class DeliveryRepository {
     );
   }
 
+// delivery_repository.dart
+
   Future<Either<String, bool>> acceptAssignment(
       String orderUuid, {
         String? notes,
+        double? latitude,
+        double? longitude,
       }) async {
-    return await deliveryService.acceptAssignment(orderUuid, notes: notes);
+    return deliveryService.acceptAssignment(
+      orderUuid,
+      notes: notes,
+      latitude: latitude,
+      longitude: longitude,
+    );
   }
 
   Future<Either<String, bool>> rejectAssignment(
       String orderUuid, {
         String? notes,
+        double? latitude,
+        double? longitude,
       }) async {
-    return await deliveryService.rejectAssignment(orderUuid, notes: notes);
+    return deliveryService.rejectAssignment(
+      orderUuid,
+      notes: notes,
+      latitude: latitude,
+      longitude: longitude,
+    );
   }
 
   Future<Either<String, bool>> updateAssignmentStatus(
@@ -52,9 +71,23 @@ class DeliveryRepository {
   }
 
 
+  Future<Either<String, UpdateStatusResponse>> updateOrderStatus(
+      String orderUuid,
+      String status, {
+        String? notes,
+        LocationData? location,
+      }) async {
+    return await deliveryService.updateOrderStatus(
+      orderUuid,
+      status,
+      notes: notes,
+      location: location,
+    );
+  }
 
-
-
+  Future<Either<String, OrderSummaryResponse>> getOrdersSummary() async {
+    return await deliveryService.getOrdersSummary();
+  }
 
   Future<Either<String, AssignmentDetailResponse>> getOrderDetail(String orderUuid) async {
     return await deliveryService.getOrderDetail(orderUuid);}

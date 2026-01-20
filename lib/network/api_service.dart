@@ -148,6 +148,7 @@ class ApiService {
   Future<Either<String, String>> changePassword({
     required String currentPassword,
     required String newPassword,
+    required String newConfirmPassword,
   }) async {
     try {
       AppLogger.info('🔐 [ApiService] Changement du mot de passe');
@@ -157,6 +158,7 @@ class ApiService {
         {
           "current_password": currentPassword,
           "new_password": newPassword,
+          "new_password_confirmation": newConfirmPassword,
         },
       );
 
