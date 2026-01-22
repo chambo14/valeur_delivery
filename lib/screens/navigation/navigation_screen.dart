@@ -52,6 +52,9 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
 
   DateTime? _lastRecalculation;
 
+  // ✅ NOUVEAU : Pour éviter les annonces répétitives
+  Map<int, Set<int>> _announcedDistances = {};
+
   @override
   void initState() {
     super.initState();
@@ -67,7 +70,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
   Future<void> _initNavigation() async {
     final position = await LocationService.getCurrentPosition();
     if (position == null) {
-      _showError('Impossible d’obtenir la position GPS');
+      _showError('Impossible d\'obtenir la position GPS');
       return;
     }
 
@@ -82,7 +85,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     );
 
     if (steps == null || steps.isEmpty) {
-      _showError('Impossible de calculer l’itinéraire');
+      _showError('Impossible de calculer l\'itinéraire');
       return;
     }
 
@@ -132,14 +135,20 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
 
     _startTracking();
 
-    // TTS initial
+    // ✅ TTS initial amélioré
     if (!_isMuted && !_hasAnnouncedFirstStep) {
       _hasAnnouncedFirstStep = true;
       await TtsService.speak(
         'Navigation démarrée vers ${widget.destinationName}',
       );
       await Future.delayed(const Duration(seconds: 2));
-      await InAppNavigationService.announceInstruction(_steps[0], 0);
+
+      // ✅ UTILISER LA NOUVELLE MÉTHODE
+      final distToFirstStep = InAppNavigationService.calculateDistance(
+        origin,
+        _steps[0].startLocation,
+      );
+      await TtsService.announceNavigationStep(_steps[0], distToFirstStep);
     }
   }
 
@@ -165,7 +174,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     // Distance restante réaliste
     double remaining = 0;
     for (int i = _currentStepIndex; i < _steps.length; i++) {
-      remaining += _steps[i].distanceValue;
+      remaining += _steps[i].distanceValue.toDouble();
     }
     _remainingDistance = remaining;
 
@@ -173,8 +182,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     if (InAppNavigationService.calculateDistance(
       currentLatLng,
       widget.destination,
-    ) <
-        20) {
+    ) < 20) {
       _onArrival();
       return;
     }
@@ -188,6 +196,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
 
     if (newIndex != _currentStepIndex && newIndex < _steps.length) {
       _currentStepIndex = newIndex;
+      _announcedDistances[_currentStepIndex] = {}; // Reset pour nouvelle étape
 
       if (!_isMuted) {
         final step = _steps[newIndex];
@@ -195,7 +204,37 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
           currentLatLng,
           step.startLocation,
         );
-        InAppNavigationService.announceInstruction(step, dist);
+
+        // ✅ UTILISER LA NOUVELLE MÉTHODE
+        TtsService.announceNavigationStep(step, dist);
+      }
+    }
+
+    // ✅ NOUVEAU : Annoncer les étapes à venir à certaines distances
+    if (!_isMuted && _currentStepIndex < _steps.length) {
+      final step = _steps[_currentStepIndex];
+      final distToStep = InAppNavigationService.calculateDistance(
+        currentLatLng,
+        step.startLocation,
+      );
+
+      // Distances clés pour les annonces: 200m, 100m, 50m
+      final distanceThresholds = [200, 100, 50];
+
+      for (final threshold in distanceThresholds) {
+        if (distToStep <= threshold && distToStep > threshold - 20) {
+          // Vérifier si cette distance n'a pas déjà été annoncée
+          _announcedDistances[_currentStepIndex] ??= {};
+
+          if (!_announcedDistances[_currentStepIndex]!.contains(threshold)) {
+            _announcedDistances[_currentStepIndex]!.add(threshold);
+
+            TtsService.announceNavigationStep(step, distToStep);
+
+            AppLogger.info('🔊 Annonce à ${threshold}m: ${step.getVoiceInstruction(distToStep)}');
+            break; // Une seule annonce à la fois
+          }
+        }
       }
     }
 
@@ -238,7 +277,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
 
   Future<void> _recalculateRoute() async {
     if (!_isMuted) {
-      await TtsService.speak('Recalcul de l’itinéraire');
+      await TtsService.speak('Recalcul de l\'itinéraire');
     }
 
     setState(() {
@@ -247,6 +286,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
       _polylines.clear();
       _currentStepIndex = 0;
       _hasAnnouncedFirstStep = false;
+      _announcedDistances.clear(); // ✅ Reset les annonces
     });
 
     await _initNavigation();
@@ -271,7 +311,13 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
-        title: const Text('Arrivée'),
+        title: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 28),
+            const SizedBox(width: 12),
+            const Text('Arrivée'),
+          ],
+        ),
         content: Text('Vous êtes arrivé à ${widget.destinationName}'),
         actions: [
           ElevatedButton(
@@ -281,6 +327,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.success,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
             child: const Text('Terminer'),
           ),
@@ -319,6 +366,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
             myLocationEnabled: true,
             zoomControlsEnabled: false,
             compassEnabled: false,
+            mapToolbarEnabled: false,
           ),
 
           Positioned(top: 50, left: 16, right: 16, child: _instructionCard()),
@@ -330,18 +378,78 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
 
   Widget _instructionCard() {
     final step = _steps[_currentStepIndex];
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppTheme.cardLight,
         borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Text(
-        step.instruction,
-        style: const TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-        ),
+      child: Row(
+        children: [
+          // ✅ Icône de manœuvre
+          Text(
+            step.maneuverIcon,
+            style: const TextStyle(fontSize: 32),
+          ),
+          const SizedBox(width: 16),
+
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ✅ Instruction courte
+                Text(
+                  step.getShortInstruction(),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textDark,
+                  ),
+                ),
+
+                // ✅ Nom de rue si disponible
+                if (step.streetName != null && step.streetName!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      step.streetName!,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: AppTheme.primaryRed,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+
+                // Distance restante pour cette étape
+                if (_currentPosition != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      InAppNavigationService.formatDistance(
+                        InAppNavigationService.calculateDistance(
+                          LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+                          step.startLocation,
+                        ),
+                      ),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textGrey.withOpacity(0.8),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -352,25 +460,92 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
       decoration: BoxDecoration(
         color: AppTheme.cardLight,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
       child: SafeArea(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            _info(Icons.straighten_rounded,
-                InAppNavigationService.formatDistance(_remainingDistance)),
-            _info(Icons.access_time_rounded, _estimatedTime),
-            IconButton(
-              onPressed: () {
-                setState(() => _isMuted = !_isMuted);
-                if (_isMuted) TtsService.stop();
-              },
-              icon: Icon(
-                _isMuted
-                    ? Icons.volume_off_rounded
-                    : Icons.volume_up_rounded,
-                color: AppTheme.primaryRed,
-              ),
+            // Infos principales
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _info(
+                  Icons.straighten_rounded,
+                  InAppNavigationService.formatDistance(_remainingDistance),
+                  'Distance',
+                ),
+                _info(
+                  Icons.access_time_rounded,
+                  _estimatedTime,
+                  'Temps',
+                ),
+                _info(
+                  Icons.navigation_rounded,
+                  '${(_currentStepIndex + 1)}/${_steps.length}',
+                  'Étape',
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // Boutons d'action
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() => _isMuted = !_isMuted);
+                      if (_isMuted) {
+                        TtsService.stop();
+                      } else {
+                        TtsService.speak('Instructions vocales activées');
+                      }
+                    },
+                    icon: Icon(
+                      _isMuted
+                          ? Icons.volume_off_rounded
+                          : Icons.volume_up_rounded,
+                      color: _isMuted ? AppTheme.textGrey : AppTheme.primaryRed,
+                    ),
+                    label: Text(
+                      _isMuted ? 'Muet' : 'Son',
+                      style: TextStyle(
+                        color: _isMuted ? AppTheme.textGrey : AppTheme.primaryRed,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(
+                        color: _isMuted ? AppTheme.textGrey : AppTheme.primaryRed,
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 12),
+
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                    icon: const Icon(Icons.close_rounded),
+                    label: const Text('Quitter'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.error,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -378,15 +553,25 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     );
   }
 
-  Widget _info(IconData icon, String value) {
+  Widget _info(IconData icon, String value, String label) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 20),
+        Icon(icon, size: 24, color: AppTheme.primaryRed),
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: AppTheme.textGrey.withOpacity(0.7),
+          ),
         ),
       ],
     );
@@ -399,7 +584,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
       SnackBar(content: Text(msg), backgroundColor: AppTheme.error),
     );
     Future.delayed(const Duration(seconds: 2), () {
-      Navigator.pop(context);
+      if (mounted) Navigator.pop(context);
     });
   }
 

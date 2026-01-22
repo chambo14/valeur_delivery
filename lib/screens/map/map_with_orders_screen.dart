@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+
 import '../../data/models/delivery/assignment.dart';
 import '../../data/providers/courier_location_provider.dart';
 import '../../data/providers/today_orders_provider.dart';
@@ -12,6 +13,7 @@ import '../../data/services/geocoding_service.dart';
 import '../../data/services/location_service.dart';
 import '../../data/services/navigation_service.dart';
 import '../../data/services/notification_service.dart';
+import '../../data/services/vehicule_icon_service.dart';
 import '../../network/config/app_logger.dart';
 import '../../theme/app_theme.dart';
 import '../navigation/navigation_screen.dart';
@@ -21,7 +23,8 @@ class MapWithOrdersScreen extends ConsumerStatefulWidget {
   const MapWithOrdersScreen({super.key});
 
   @override
-  ConsumerState<MapWithOrdersScreen> createState() => _MapWithOrdersScreenState();
+  ConsumerState<MapWithOrdersScreen> createState() =>
+      _MapWithOrdersScreenState();
 }
 
 class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
@@ -54,6 +57,9 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
   Timer? _autoRefreshTimer;
   DateTime? _lastRefreshTime;
 
+  // ✅ NOUVEAU : Type de véhicule du coursier
+  VehicleType _vehicleType = VehicleType.moto; // Par défaut
+
   @override
   void initState() {
     super.initState();
@@ -61,6 +67,11 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
+
+    // ✅ NOUVEAU : Déterminer le type de véhicule
+    // TODO: Récupérer depuis le profil du coursier
+    // Exemple: final profile = ref.read(courierProfileProvider);
+    // _vehicleType = profile.vehicleType == 'car' ? VehicleType.car : VehicleType.moto;
 
     _initializeNotificationService();
     _initializeMap();
@@ -78,7 +89,8 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
       const Duration(minutes: 2),
           (timer) {
         if (mounted && !_isRefreshing) {
-          AppLogger.info('🔄 [MapWithOrdersScreen] Rafraîchissement automatique');
+          AppLogger.info(
+              '🔄 [MapWithOrdersScreen] Rafraîchissement automatique');
           _refreshOrders(showSnackbar: false);
         }
       },
@@ -88,9 +100,11 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
   Future<void> _initializeNotificationService() async {
     try {
       await NotificationService.initialize();
-      AppLogger.info('✅ [MapWithOrdersScreen] NotificationService initialisé');
+      AppLogger.info(
+          '✅ [MapWithOrdersScreen] NotificationService initialisé');
     } catch (e) {
-      AppLogger.error('❌ [MapWithOrdersScreen] Erreur init NotificationService', e);
+      AppLogger.error(
+          '❌ [MapWithOrdersScreen] Erreur init NotificationService', e);
     }
   }
 
@@ -206,7 +220,6 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
   Future<void> _updateMarkers() async {
     final ordersState = ref.read(todayOrdersProvider);
 
-    // ✅ CORRIGÉ : Utiliser orders au lieu de assignments
     final filteredAssignments = _selectedFilter == null
         ? ordersState.orders
         : ordersState.orders
@@ -217,6 +230,7 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
       _markers.clear();
 
       if (_currentPosition != null) {
+        // ✅ UTILISER L'ICÔNE DE VÉHICULE PERSONNALISÉE
         _markers.add(
           Marker(
             markerId: const MarkerId('current_position'),
@@ -224,10 +238,14 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
               _currentPosition!.latitude,
               _currentPosition!.longitude,
             ),
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-              BitmapDescriptor.hueRed,
+            icon: VehicleIconService.getVehicleIcon(_vehicleType),
+            infoWindow: InfoWindow(
+              title: _vehicleType == VehicleType.moto
+                  ? '🏍️ Ma position'
+                  : '🚗 Ma position',
             ),
-            infoWindow: const InfoWindow(title: '📍 Ma position'),
+            rotation: _currentPosition!.heading, // Direction du véhicule
+            anchor: const Offset(0.5, 0.5), // Centrer l'icône
           ),
         );
       }
@@ -237,7 +255,6 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
       final order = assignment.order;
       LatLng? coordinates;
 
-      // ✅ CORRIGÉ : Utiliser hasDeliveryCoordinates et les champs plats
       if (order.hasDeliveryCoordinates) {
         coordinates = LatLng(
           order.deliveryLatitude!,
@@ -305,7 +322,6 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
 
     final ordersState = ref.read(todayOrdersProvider);
 
-    // ✅ CORRIGÉ : Utiliser orders et order.uuid
     final assignment = ordersState.orders.firstWhereOrNull(
           (a) => a.order.uuid == orderId,
     );
@@ -318,7 +334,6 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
     final order = assignment.order;
     LatLng? destination;
 
-    // ✅ CORRIGÉ : Utiliser hasDeliveryCoordinates
     if (order.hasDeliveryCoordinates) {
       destination = LatLng(
         order.deliveryLatitude!,
@@ -372,7 +387,8 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
       return;
     }
 
-    final origin = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
+    final origin =
+    LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
 
     final directions = await NavigationService.getDirections(
       origin: origin,
@@ -503,7 +519,8 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
         );
       }
     } catch (e) {
-      AppLogger.error('❌ [MapWithOrdersScreen] Erreur test notifications', e);
+      AppLogger.error(
+          '❌ [MapWithOrdersScreen] Erreur test notifications', e);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -560,7 +577,6 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
       }
     });
 
-    // ✅ CORRIGÉ : Utiliser orders
     final filteredAssignments = _selectedFilter == null
         ? ordersState.orders
         : ordersState.orders
@@ -573,7 +589,8 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
           // Map
           _isLoadingPosition
               ? const Center(
-            child: CircularProgressIndicator(color: AppTheme.primaryRed),
+            child:
+            CircularProgressIndicator(color: AppTheme.primaryRed),
           )
               : GoogleMap(
             onMapCreated: (controller) => _mapController = controller,
@@ -654,7 +671,7 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
                       Expanded(
                         child: _buildQuickStat(
                           'Total',
-                          ordersState.totalOrders, // ✅ CORRIGÉ
+                          ordersState.totalOrders,
                           AppTheme.info,
                         ),
                       ),
@@ -731,11 +748,12 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
             child: GestureDetector(
               onVerticalDragUpdate: (details) {
                 setState(() {
-                  _sheetPosition =
-                      (_sheetPosition - details.delta.dy / screenHeight).clamp(
-                        _sheetMinHeight / screenHeight,
-                        _sheetMaxHeight,
-                      );
+                  _sheetPosition = (_sheetPosition -
+                      details.delta.dy / screenHeight)
+                      .clamp(
+                    _sheetMinHeight / screenHeight,
+                    _sheetMaxHeight,
+                  );
                 });
               },
               onVerticalDragEnd: (details) {
@@ -1030,7 +1048,6 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
           children: [
             Row(
               children: [
-                // ✅ CORRIGÉ : isExpress n'est pas nullable
                 if (order.isExpress)
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -1064,7 +1081,9 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
-                      color: isSelected ? AppTheme.primaryRed : AppTheme.textDark,
+                      color: isSelected
+                          ? AppTheme.primaryRed
+                          : AppTheme.textDark,
                     ),
                   ),
                 ),
@@ -1148,8 +1167,10 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildMiniRouteInfo(Icons.straighten_rounded, _routeDistance!),
-                    _buildMiniRouteInfo(Icons.access_time_rounded, _routeDuration!),
+                    _buildMiniRouteInfo(
+                        Icons.straighten_rounded, _routeDistance!),
+                    _buildMiniRouteInfo(
+                        Icons.access_time_rounded, _routeDuration!),
                     _buildMiniRouteInfo(Icons.schedule_rounded, _routeETA!),
                   ],
                 ),
@@ -1159,112 +1180,109 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
             // Action buttons
             if (isSelected) ...[
               const SizedBox(height: 12),
-              // Dans _buildCompactOrderCard - section des boutons d'action
-
-              if (isSelected) ...[
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    if (assignment.isAssigned) ...[
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () async {
-                            final success = await ref
-                                .read(todayOrdersProvider.notifier)
-                                .rejectOrder(
-                              assignment.assignmentUuid ?? '',
-                              latitude: _currentPosition?.latitude,
-                              longitude: _currentPosition?.longitude,
-                            );
-                            if (success) {
-                              setState(() {
-                                _selectedOrderId = null;
-                                _polylines.clear();
-                                _routeDistance = null;
-                                _routeDuration = null;
-                                _routeETA = null;
-                              });
-                              _updateMarkers();
-                            }
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppTheme.error,
-                            side: const BorderSide(color: AppTheme.error),
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                          ),
-                          child: const Text(
-                            'Refuser',
-                            style: TextStyle(fontSize: 12),
-                          ),
+              Row(
+                children: [
+                  if (assignment.isAssigned) ...[
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () async {
+                          final success = await ref
+                              .read(todayOrdersProvider.notifier)
+                              .rejectOrder(
+                            assignment.assignmentUuid ?? '',
+                            latitude: _currentPosition?.latitude,
+                            longitude: _currentPosition?.longitude,
+                          );
+                          if (success) {
+                            setState(() {
+                              _selectedOrderId = null;
+                              _polylines.clear();
+                              _routeDistance = null;
+                              _routeDuration = null;
+                              _routeETA = null;
+                            });
+                            _updateMarkers();
+                          }
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.error,
+                          side: const BorderSide(color: AppTheme.error),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                        child: const Text(
+                          'Refuser',
+                          style: TextStyle(fontSize: 12),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            final success = await ref
-                                .read(todayOrdersProvider.notifier)
-                                .acceptOrder(
-                              assignment.assignmentUuid ?? '',
-                              latitude: _currentPosition?.latitude,
-                              longitude: _currentPosition?.longitude,
-                            );
-                            if (success) _updateMarkers();
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.success,
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                          ),
-                          child: const Text(
-                            'Accepter',
-                            style: TextStyle(fontSize: 12),
-                          ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          final success = await ref
+                              .read(todayOrdersProvider.notifier)
+                              .acceptOrder(
+                            assignment.assignmentUuid ?? '',
+                            latitude: _currentPosition?.latitude,
+                            longitude: _currentPosition?.longitude,
+                          );
+                          if (success) _updateMarkers();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.success,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                        child: const Text(
+                          'Accepter',
+                          style: TextStyle(fontSize: 12),
                         ),
                       ),
-                    ] else if (assignment.isAccepted) ...[
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            if (!order.hasDeliveryCoordinates) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Coordonnées de livraison manquantes'),
-                                  backgroundColor: AppTheme.error,
-                                ),
-                              );
-                              return;
-                            }
-
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => NavigationScreen(
-                                  destination: LatLng(
-                                    order.deliveryLatitude!,
-                                    order.deliveryLongitude!,
-                                  ),
-                                  destinationName: order.customerName ?? 'Destination',
-                                  destinationAddress: order.deliveryAddress ?? '',
-                                ),
+                    ),
+                  ] else if (assignment.isAccepted) ...[
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          if (!order.hasDeliveryCoordinates) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Coordonnées de livraison manquantes'),
+                                backgroundColor: AppTheme.error,
                               ),
                             );
-                          },
-                          icon: const Icon(Icons.navigation_rounded, size: 16),
-                          label: const Text(
-                            'Démarrer',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.primaryRed,
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                          ),
+                            return;
+                          }
+
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => NavigationScreen(
+                                destination: LatLng(
+                                  order.deliveryLatitude!,
+                                  order.deliveryLongitude!,
+                                ),
+                                destinationName:
+                                order.customerName ?? 'Destination',
+                                destinationAddress: order.deliveryAddress ?? '',
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.navigation_rounded, size: 16),
+                        label: const Text(
+                          'Démarrer',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryRed,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
                         ),
                       ),
-                    ],
+                    ),
                   ],
-                ),
-              ],
+                ],
+              ),
             ],
           ],
         ),
