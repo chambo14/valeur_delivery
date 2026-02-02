@@ -30,24 +30,28 @@ class CourierProfile {
   factory CourierProfile.fromJson(Map<String, dynamic> json) {
     try {
       return CourierProfile(
-        uuid: json['uuid'] as String,
+        uuid: json['uuid']?.toString() ?? '',
         user: CourierUser.fromJson(json['user'] as Map<String, dynamic>),
-        vehicleType: json['vehicle_type'] as String,
-        isActive: json['is_active'] as int,
-        status: json['status'] as String,
+        vehicleType: json['vehicle_type']?.toString() ?? 'moto',
+        // ✅ CORRECTION : Gérer le cas où isActive peut être null, String, bool ou int
+        isActive: _parseIsActive(json['is_active']),
+        status: json['status']?.toString() ?? 'offline',
         currentLocation: json['current_location'] != null
             ? CourierLocation.fromJson(
             json['current_location'] as Map<String, dynamic>)
             : null,
-        zones: (json['zones'] as List<dynamic>)
+        zones: json['zones'] != null
+            ? (json['zones'] as List<dynamic>)
             .map((zone) => CourierZone.fromJson(zone as Map<String, dynamic>))
-            .toList(),
+            .toList()
+            : [],
         primaryZone: json['primary_zone'] != null
             ? CourierZone.fromJson(
             json['primary_zone'] as Map<String, dynamic>)
             : null,
-        createdAt: DateTime.parse(json['created_at'] as String),
-        updatedAt: DateTime.parse(json['updated_at'] as String),
+        // ✅ CORRECTION : Gérer les dates qui peuvent être null ou mal formatées
+        createdAt: _parseDateTime(json['created_at']) ?? DateTime.now(),
+        updatedAt: _parseDateTime(json['updated_at']) ?? DateTime.now(),
       );
     } catch (e, stackTrace) {
       print('❌ [CourierProfile] Parse error: $e');
@@ -55,6 +59,49 @@ class CourierProfile {
       print('   StackTrace: $stackTrace');
       rethrow;
     }
+  }
+
+  // ✅ HELPER : Parser isActive de manière robuste
+  static int _parseIsActive(dynamic value) {
+    if (value == null) return 0;
+
+    // Si c'est déjà un int
+    if (value is int) return value;
+
+    // Si c'est un bool
+    if (value is bool) return value ? 1 : 0;
+
+    // Si c'est un String
+    if (value is String) {
+      // Gérer "true"/"false"
+      if (value.toLowerCase() == 'true') return 1;
+      if (value.toLowerCase() == 'false') return 0;
+
+      // Essayer de parser en int
+      final parsed = int.tryParse(value);
+      if (parsed != null) return parsed;
+    }
+
+    // Par défaut, inactif
+    return 0;
+  }
+
+  // ✅ HELPER : Parser les dates de manière robuste
+  static DateTime? _parseDateTime(dynamic value) {
+    if (value == null) return null;
+
+    if (value is DateTime) return value;
+
+    if (value is String) {
+      try {
+        return DateTime.parse(value);
+      } catch (e) {
+        print('⚠️ Impossible de parser la date: $value');
+        return null;
+      }
+    }
+
+    return null;
   }
 
   Map<String, dynamic> toJson() {
@@ -82,6 +129,7 @@ class CourierProfile {
       case 'moto':
         return 'Moto';
       case 'velo':
+      case 'vélo':
         return 'Vélo';
       default:
         return vehicleType;
@@ -141,4 +189,3 @@ class CourierProfile {
   String toString() =>
       'CourierProfile(uuid: $uuid, user: ${user.name}, status: $status)';
 }
-
