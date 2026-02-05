@@ -21,7 +21,7 @@ class Order {
   final DateTime createdAt;
   final String? barcodeValue;
   final DateTime? reservedAt;
-  final String? orderAmount;
+  final double orderAmount; // ✅ Changé de String? à double
   final String? packageWeightKg;
   final Zone zone;
   final Pricing pricing;
@@ -44,7 +44,7 @@ class Order {
     required this.createdAt,
     this.barcodeValue,
     this.reservedAt,
-    this.orderAmount,
+    this.orderAmount = 0.0,
     this.packageWeightKg,
     required this.zone,
     required this.pricing,
@@ -104,7 +104,7 @@ class Order {
             : DateTime.now(),
         barcodeValue: json['barcode_value'] as String?,
         reservedAt: _parseDateTime(json['reserved_at']),
-        orderAmount: json['order_amount'] as String?,
+        orderAmount: _parseDouble(json['order_amount']) ?? 0.0, // ✅ Corrigé
         packageWeightKg: json['package_weight_kg'] as String?,
         zone: zoneData != null && zoneData is Map<String, dynamic>
             ? Zone.fromJson(zoneData)
@@ -156,11 +156,9 @@ class Order {
   bool get hasPickupCoordinates =>
       pickupLatitude != null && pickupLongitude != null;
 
-  // Montant formaté
+  // ✅ Montant formaté (corrigé)
   String get formattedAmount {
-    if (orderAmount == null) return '0 FCFA';
-    final amount = double.tryParse(orderAmount!) ?? 0;
-    return '${amount.toStringAsFixed(0)} FCFA';
+    return '${orderAmount.toStringAsFixed(0)} FCFA';
   }
 
   // Poids formaté
@@ -215,7 +213,7 @@ class Order {
     DateTime? createdAt,
     String? barcodeValue,
     DateTime? reservedAt,
-    String? orderAmount,
+    double? orderAmount, // ✅ Corrigé de String? à double?
     String? packageWeightKg,
     Zone? zone,
     Pricing? pricing,
@@ -238,7 +236,7 @@ class Order {
       createdAt: createdAt ?? this.createdAt,
       barcodeValue: barcodeValue ?? this.barcodeValue,
       reservedAt: reservedAt ?? this.reservedAt,
-      orderAmount: orderAmount ?? this.orderAmount,
+      orderAmount: orderAmount ?? this.orderAmount, // ✅ Corrigé
       packageWeightKg: packageWeightKg ?? this.packageWeightKg,
       zone: zone ?? this.zone,
       pricing: pricing ?? this.pricing,
@@ -258,4 +256,3 @@ class Order {
   @override
   int get hashCode => orderUuid.hashCode;
 }
-

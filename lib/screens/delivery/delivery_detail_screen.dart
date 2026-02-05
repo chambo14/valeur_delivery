@@ -617,6 +617,15 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
               _buildInfoRow('Code barre',
                   assignment.order.barcodeValue ?? 'Non disponible'),
               _buildInfoRow(
+                'Prix de la commande',
+                '${NumberFormat('#,###', 'fr_FR').format(assignment.order.orderAmount.toInt())} F',
+              ),
+
+              _buildInfoRow(
+                'Prix de la course',
+                '${NumberFormat('#,###', 'fr_FR').format(assignment.order.pricing.price.toInt())} F',
+              ),
+              _buildInfoRow(
                 'Express',
                 assignment.order.isExpress ? 'Oui ⚡' : 'Non',
                 valueColor: assignment.order.isExpress

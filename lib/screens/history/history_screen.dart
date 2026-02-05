@@ -49,6 +49,19 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
     });
   }
 
+  // ✅ NOUVEAU : Calculer le prix total des courses
+  double _calculateTotalEarnings(List<dynamic> assignments) {
+    return assignments.fold(0.0, (total, assignment) {
+      final isDelivered =
+          assignment.assignmentStatus?.toLowerCase() == 'delivered' ||
+              assignment.assignmentStatus?.toLowerCase() == 'completed';
+      if (isDelivered) {
+        return total + (assignment.order.pricing.finalPrice ?? 0.0);
+      }
+      return total;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     // ✅ Écouter l'état de l'historique
@@ -58,6 +71,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
     final isRefreshing = historyState.isRefreshing;
     final hasError = historyState.hasError;
     final assignments = historyState.assignments;
+
+    // ✅ Calculer le total des gains
+    final totalEarnings = _calculateTotalEarnings(assignments);
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
@@ -100,7 +116,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
                   Expanded(
                     child: _buildStatCard(
                       'Total',
-                      '${NumberFormat.compact(locale: 'fr').format(stats['amount'])} F',
+                      '${NumberFormat.compact(locale: 'fr').format(totalEarnings)} F',
                       Icons.payments_rounded,
                       AppTheme.primaryRed,
                     ),
@@ -307,10 +323,27 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
   }
 
   Widget _buildHistoryCard(assignment) {
-    final isDelivered =
-        assignment.assignmentStatus?.toLowerCase() == 'delivered' ||
-            assignment.assignmentStatus?.toLowerCase() == 'completed';
-    final statusColor = isDelivered ? AppTheme.success : AppTheme.error;
+    // ✅ NOUVEAU : Gestion de tous les statuts possibles
+    final status = assignment.assignmentStatus?.toLowerCase() ?? '';
+
+    Color statusColor;
+    IconData statusIcon;
+
+    if (status == 'delivered' || status == 'completed') {
+      statusColor = AppTheme.success;
+      statusIcon = Icons.check_circle_rounded;
+    } else if (status == 'accepted' || status == 'in_progress') {
+      statusColor = AppTheme.info; // ✅ Bleu pour "Acceptée"
+      statusIcon = Icons.play_circle_rounded;
+    } else if (status == 'failed' || status == 'cancelled') {
+      statusColor = AppTheme.error;
+      statusIcon = Icons.cancel_rounded;
+    } else {
+      statusColor = AppTheme.warning;
+      statusIcon = Icons.info_rounded;
+    }
+
+    final isDelivered = status == 'delivered' || status == 'completed';
 
     return Container(
       decoration: BoxDecoration(
@@ -352,12 +385,16 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
                         children: [
                           Row(
                             children: [
-                              Text(
-                                assignment.order.orderNumber ?? 'N/A',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: AppTheme.textDark,
+                              Flexible( // ✅ Ajout de Flexible pour permettre au texte de s'adapter
+                                child: Text(
+                                  assignment.order.orderNumber ?? 'N/A',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: AppTheme.textDark,
+                                  ),
+                                  maxLines: 1, // ✅ Limiter à une ligne
+                                  overflow: TextOverflow.ellipsis, // ✅ Ajouter ... si trop long
                                 ),
                               ),
                               // ✅ Badge EXPRESS
@@ -430,9 +467,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            isDelivered
-                                ? Icons.check_circle_rounded
-                                : Icons.cancel_rounded,
+                            statusIcon,
                             color: statusColor,
                             size: 16,
                           ),
@@ -524,7 +559,6 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
 
                 const SizedBox(height: 14),
 
-                // ✅ CORRIGÉ : Suppression de la référence à order.items
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -554,16 +588,15 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
                         ),
                       ],
                     ),
-                    // Prix
-                    if (isDelivered)
-                      Text(
-                        '${NumberFormat('#,###', 'fr_FR').format(assignment.order.pricing.basePrice.toInt())} F',
-                        style: const TextStyle(
-                          color: AppTheme.primaryRed,
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    // ✅ Prix (toujours affiché maintenant)
+                    Text(
+                      '${NumberFormat('#,###', 'fr_FR').format(assignment.order.pricing.finalPrice.toInt())} F',
+                      style: const TextStyle(
+                        color: AppTheme.primaryRed,
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
                       ),
+                    ),
                   ],
                 ),
               ],

@@ -59,7 +59,7 @@ class DeliveryCard extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        assignment.order.orderNumber ?? 'N/A', // ✅ Gérer null
+                        assignment.order.orderNumber ?? 'N/A',
                         style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.bold,
@@ -81,7 +81,7 @@ class DeliveryCard extends StatelessWidget {
                         ),
                       ),
                       child: Text(
-                        assignment.statusDisplay, // ✅ Déjà un String non-null
+                        assignment.statusDisplay,
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -121,7 +121,7 @@ class DeliveryCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              assignment.order.customerName ?? 'Client', // ✅ Gérer null
+                              assignment.order.customerName ?? 'Client',
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
@@ -130,7 +130,7 @@ class DeliveryCard extends StatelessWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              assignment.order.customerPhone ?? 'N/A', // ✅ Gérer null
+                              assignment.order.customerPhone ?? 'N/A',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppTheme.textGrey,
@@ -163,7 +163,7 @@ class DeliveryCard extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        assignment.order.deliveryAddress ?? 'Adresse non disponible', // ✅ Gérer null
+                        assignment.order.deliveryAddress ?? 'Adresse non disponible',
                         style: const TextStyle(
                           fontSize: 13,
                           color: AppTheme.textGrey,
@@ -198,7 +198,7 @@ class DeliveryCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          assignment.order.zone.name ?? 'Zone', // ✅ Gérer null
+                          assignment.order.zone.name ?? 'Zone',
                           style: const TextStyle(
                             fontSize: 12,
                             color: AppTheme.textGrey,
@@ -208,14 +208,78 @@ class DeliveryCard extends StatelessWidget {
                       ],
                     ),
 
-                    // Prix
-                    Text(
-                      _formatPrice(assignment.order.pricing.basePrice), // ✅ Utiliser basePrice
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.primaryRed,
-                      ),
+                    // ✅ NOUVEAU : Prix de livraison
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          _formatPrice(assignment.order.pricing.finalPrice),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primaryRed,
+                          ),
+                        ),
+                        // ✅ Distance et véhicule (si disponibles)
+                        if (assignment.order.pricing.distanceKm != null)
+                          Text(
+                            '${assignment.order.pricing.distanceKm!.toStringAsFixed(1)} km • ${assignment.order.pricing.vehicleType ?? 'N/A'}',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: AppTheme.textGrey,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Zone
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.warning.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.work,
+                            size: 14,
+                            color: AppTheme.accentRed,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          assignment.order.barcodeValue ?? 'Barecode',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textGrey,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // ✅ NOUVEAU : Prix de livraison
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          _formatPrice(assignment.order.orderAmount),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primaryRed,
+                          ),
+                        ),
+
+                      ],
                     ),
                   ],
                 ),
