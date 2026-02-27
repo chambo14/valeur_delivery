@@ -7,6 +7,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../data/models/delivery/assignment.dart';
+import '../../data/models/navigation/navigation_type.dart';
 import '../../data/providers/courier_location_provider.dart';
 import '../../data/providers/today_orders_provider.dart';
 import '../../data/services/geocoding_service.dart';
@@ -28,7 +29,7 @@ class MapWithOrdersScreen extends ConsumerStatefulWidget {
 }
 
 class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver  {
   GoogleMapController? _mapController;
   Position? _currentPosition;
   StreamSubscription<Position>? _positionStreamSubscription;
@@ -63,16 +64,11 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _sheetController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-
-    // ✅ NOUVEAU : Déterminer le type de véhicule
-    // TODO: Récupérer depuis le profil du coursier
-    // Exemple: final profile = ref.read(courierProfileProvider);
-    // _vehicleType = profile.vehicleType == 'car' ? VehicleType.car : VehicleType.moto;
-
     _initializeNotificationService();
     _initializeMap();
     _startAutoRefresh();
@@ -84,9 +80,19 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
     });
   }
 
+  // ✅ AJOUT : Rafraîchir quand l'app revient
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    if (state == AppLifecycleState.resumed) {
+      AppLogger.info('🔄 [MapWithOrders] App resumed - Rafraîchissement');
+      _refreshOrders(showSnackbar: false);
+    }
+  }
   void _startAutoRefresh() {
     _autoRefreshTimer = Timer.periodic(
-      const Duration(minutes: 2),
+      const Duration(seconds: 30),
           (timer) {
         if (mounted && !_isRefreshing) {
           AppLogger.info(
@@ -849,7 +855,11 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
                           _buildFilterChip('Toutes', null),
                           _buildFilterChip('Assignées', 'assigned'),
                           _buildFilterChip('Acceptées', 'accepted'),
-                          _buildFilterChip('En transit', 'delivering'),
+                          _buildFilterChip('Récupérées', 'picked'),
+                          _buildFilterChip('En stock', 'stocked'),      // ✅ AJOUT
+                          _buildFilterChip('En livraison', 'delivering'),
+                          _buildFilterChip('Livrées', 'delivered'),
+
                         ],
                       ),
                     ),
@@ -1046,6 +1056,7 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header: Express badge + Order number + Status
             Row(
               children: [
                 if (order.isExpress)
@@ -1081,37 +1092,17 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
-                      color: isSelected
-                          ? AppTheme.primaryRed
-                          : AppTheme.textDark,
+                      color: isSelected ? AppTheme.primaryRed : AppTheme.textDark,
                     ),
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: assignment.isAccepted
-                        ? AppTheme.success.withOpacity(0.1)
-                        : AppTheme.warning.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    assignment.statusDisplay,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: assignment.isAccepted
-                          ? AppTheme.success
-                          : AppTheme.warning,
-                    ),
-                  ),
-                ),
+                _buildStatusBadge(assignment),
               ],
             ),
+
             const SizedBox(height: 8),
+
+            // Customer name
             Row(
               children: [
                 const Icon(
@@ -1132,18 +1123,21 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
                 ),
               ],
             ),
+
             const SizedBox(height: 4),
+
+            // Adresse selon le statut
             Row(
               children: [
-                const Icon(
-                  Icons.location_on_rounded,
+                Icon(
+                  _getAddressIcon(assignment),
                   size: 14,
-                  color: AppTheme.primaryRed,
+                  color: _getAddressColor(assignment),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    order.deliveryAddress ?? 'Adresse inconnue',
+                    _getDisplayAddress(assignment),
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppTheme.textGrey,
@@ -1155,7 +1149,7 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
               ],
             ),
 
-            // Route info
+            // Route info (si sélectionné)
             if (isSelected && _routeDistance != null) ...[
               const SizedBox(height: 12),
               Container(
@@ -1177,116 +1171,315 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
               ),
             ],
 
+            // Loading route indicator
+            if (isSelected && _isLoadingRoute) ...[
+              const SizedBox(height: 12),
+              const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppTheme.primaryRed,
+                  ),
+                ),
+              ),
+            ],
+
             // Action buttons
             if (isSelected) ...[
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  if (assignment.isAssigned) ...[
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () async {
-                          final success = await ref
-                              .read(todayOrdersProvider.notifier)
-                              .rejectOrder(
-                            assignment.assignmentUuid ?? '',
-                            latitude: _currentPosition?.latitude,
-                            longitude: _currentPosition?.longitude,
-                          );
-                          if (success) {
-                            setState(() {
-                              _selectedOrderId = null;
-                              _polylines.clear();
-                              _routeDistance = null;
-                              _routeDuration = null;
-                              _routeETA = null;
-                            });
-                            _updateMarkers();
-                          }
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.error,
-                          side: const BorderSide(color: AppTheme.error),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                        child: const Text(
-                          'Refuser',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 2,
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          final success = await ref
-                              .read(todayOrdersProvider.notifier)
-                              .acceptOrder(
-                            assignment.assignmentUuid ?? '',
-                            latitude: _currentPosition?.latitude,
-                            longitude: _currentPosition?.longitude,
-                          );
-                          if (success) _updateMarkers();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.success,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                        child: const Text(
-                          'Accepter',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ),
-                    ),
-                  ] else if (assignment.isAccepted) ...[
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          if (!order.hasDeliveryCoordinates) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                    'Coordonnées de livraison manquantes'),
-                                backgroundColor: AppTheme.error,
-                              ),
-                            );
-                            return;
-                          }
-
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => NavigationScreen(
-                                destination: LatLng(
-                                  order.deliveryLatitude!,
-                                  order.deliveryLongitude!,
-                                ),
-                                destinationName:
-                                order.customerName ?? 'Destination',
-                                destinationAddress: order.deliveryAddress ?? '',
-                              ),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.navigation_rounded, size: 16),
-                        label: const Text(
-                          'Démarrer',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryRed,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+              _buildActionButtons(assignment),
             ],
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildStatusBadge(Assignment assignment) {
+    Color bgColor;
+    Color textColor;
+    String text = assignment.statusDisplay;
+
+    if (assignment.isPicked || assignment.isDelivering) {
+      bgColor = AppTheme.primaryRed.withOpacity(0.1);
+      textColor = AppTheme.primaryRed;
+    } else if (assignment.isAccepted) {
+      bgColor = AppTheme.warning.withOpacity(0.1);
+      textColor = AppTheme.warning;
+    } else if (assignment.isStocked) {              // ✅ AJOUT
+      bgColor = AppTheme.info.withOpacity(0.1);
+      textColor = AppTheme.info;
+    } else if (assignment.isCompleted) {
+      bgColor = AppTheme.success.withOpacity(0.1);
+      textColor = AppTheme.success;
+    } else {
+      bgColor = AppTheme.info.withOpacity(0.1);
+      textColor = AppTheme.info;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: textColor,
+        ),
+      ),
+    );
+  }
+
+// ✅ Helper pour l'icône d'adresse
+  IconData _getAddressIcon(Assignment assignment) {
+    if (assignment.isAccepted) {
+      return Icons.store_rounded; // Point de récupération
+    }
+    return Icons.location_on_rounded; // Point de livraison
+  }
+
+// ✅ Helper pour la couleur de l'icône
+  Color _getAddressColor(Assignment assignment) {
+    if (assignment.isAccepted) {
+      return AppTheme.warning;
+    }
+    return AppTheme.primaryRed;
+  }
+
+// ✅ Helper pour l'adresse à afficher
+  String _getDisplayAddress(Assignment assignment) {
+    final order = assignment.order;
+
+    if (assignment.isAccepted) {
+      // Afficher l'adresse de récupération
+      return order.pickupAddress ?? 'Adresse de récupération inconnue';
+    }
+    // Afficher l'adresse de livraison
+    return order.deliveryAddress ?? 'Adresse de livraison inconnue';
+  }
+
+// ✅ Widget pour les boutons d'action
+  Widget _buildActionButtons(Assignment assignment) {
+    final order = assignment.order;
+
+    return Row(
+      children: [
+        // ═══════════════ ASSIGNÉE : Accepter / Refuser ═══════════════
+        if (assignment.isAssigned) ...[
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () async {
+                final success = await ref
+                    .read(todayOrdersProvider.notifier)
+                    .rejectOrder(
+                  assignment.assignmentUuid ?? '',
+                  latitude: _currentPosition?.latitude,
+                  longitude: _currentPosition?.longitude,
+                );
+
+                if (success) {
+                  setState(() {
+                    _selectedOrderId = null;
+                    _polylines.clear();
+                    _routeDistance = null;
+                    _routeDuration = null;
+                    _routeETA = null;
+                  });
+
+                  // ✅ Rafraîchir depuis le serveur
+                  await ref
+                      .read(todayOrdersProvider.notifier)
+                      .refreshTodayOrders();
+
+                  await _updateMarkers();
+                }
+              },
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.error,
+                side: const BorderSide(color: AppTheme.error),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              child: const Text('Refuser', style: TextStyle(fontSize: 12)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 2,
+            child: ElevatedButton(
+              onPressed: () async {
+                final success = await ref
+                    .read(todayOrdersProvider.notifier)
+                    .acceptOrder(
+                  assignment.assignmentUuid ?? '',
+                  latitude: _currentPosition?.latitude,
+                  longitude: _currentPosition?.longitude,
+                );
+
+                if (success) {
+                  AppLogger.info('✅ Commande acceptée, rafraîchissement...');
+
+                  // ✅ Rafraîchir depuis le serveur
+                  await ref
+                      .read(todayOrdersProvider.notifier)
+                      .refreshTodayOrders();
+
+                  await _updateMarkers();
+
+                  // ✅ Message de succès
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Row(
+                          children: [
+                            Icon(Icons.check_circle_rounded, color: Colors.white),
+                            SizedBox(width: 12),
+                            Text('Commande acceptée !'),
+                          ],
+                        ),
+                        backgroundColor: AppTheme.success,
+                        behavior: SnackBarBehavior.floating,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.success,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              child: const Text('Accepter', style: TextStyle(fontSize: 12)),
+            ),
+          ),
+        ]
+
+        // ═══════════════ ACCEPTÉE : Aller récupérer le colis ═══════════════
+        else if (assignment.isAccepted) ...[
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () {
+                if (!order.hasPickupCoordinates) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Coordonnées de récupération manquantes'),
+                      backgroundColor: AppTheme.error,
+                    ),
+                  );
+                  return;
+                }
+
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => NavigationScreen(
+                      destination: LatLng(
+                        order.pickupLatitude!,
+                        order.pickupLongitude!,
+                      ),
+                      destinationName: 'Point de récupération',
+                      destinationAddress: order.pickupAddress ?? '',
+                      assignmentUuid: assignment.assignmentUuid,
+                      navigationType: NavigationType.pickup,
+                    ),
+                  ),
+                ).then((_) {
+                  // ✅ Rafraîchir après retour
+                  _refreshOrders(showSnackbar: false);
+                });
+              },
+              icon: const Icon(Icons.inventory_2_rounded, size: 16),
+              label: const Text('Récupérer', style: TextStyle(fontSize: 12)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.warning,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
+          ),
+        ]
+
+        // ═══════════════ RÉCUPÉRÉE / EN LIVRAISON : Aller livrer ═══════════════
+        else if (assignment.isPicked || assignment.isDelivering) ...[
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  if (!order.hasDeliveryCoordinates) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Coordonnées de livraison manquantes'),
+                        backgroundColor: AppTheme.error,
+                      ),
+                    );
+                    return;
+                  }
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => NavigationScreen(
+                        destination: LatLng(
+                          order.deliveryLatitude!,
+                          order.deliveryLongitude!,
+                        ),
+                        destinationName: order.customerName ?? 'Client',
+                        destinationAddress: order.deliveryAddress ?? '',
+                        assignmentUuid: assignment.assignmentUuid,
+                        navigationType: NavigationType.delivery,
+                      ),
+                    ),
+                  ).then((_) {
+                    // ✅ Rafraîchir après retour
+                    _refreshOrders(showSnackbar: false);
+                  });
+                },
+                icon: const Icon(Icons.local_shipping_rounded, size: 16),
+                label: const Text('Livrer', style: TextStyle(fontSize: 12)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryRed,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+              ),
+            ),
+          ]
+
+          // ═══════════════ LIVRÉE / TERMINÉE ═══════════════
+          else if (assignment.isCompleted) ...[
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.success.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.check_circle_rounded,
+                        color: AppTheme.success,
+                        size: 16,
+                      ),
+                      SizedBox(width: 6),
+                      Text(
+                        'Livrée',
+                        style: TextStyle(
+                          color: AppTheme.success,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+      ],
     );
   }
 
@@ -1307,9 +1500,29 @@ class _MapWithOrdersScreenState extends ConsumerState<MapWithOrdersScreen>
       ],
     );
   }
+  //
+  // Widget _buildMiniRouteInfo(IconData icon, String text) {
+  //   return Row(
+  //     mainAxisSize: MainAxisSize.min,
+  //     children: [
+  //       Icon(icon, size: 12, color: AppTheme.info),
+  //       const SizedBox(width: 4),
+  //       Text(
+  //         text,
+  //         style: const TextStyle(
+  //           fontSize: 11,
+  //           fontWeight: FontWeight.w600,
+  //           color: AppTheme.info,
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
 
   @override
   void dispose() {
+    // ✅ AJOUT : Retirer l'observer
+    WidgetsBinding.instance.removeObserver(this);
     _stopPositionTracking();
     _autoRefreshTimer?.cancel();
     _sheetController.dispose();

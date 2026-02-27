@@ -1,3 +1,5 @@
+// models/delivery/assignment.dart
+
 import 'order.dart';
 
 class Assignment {
@@ -5,6 +7,8 @@ class Assignment {
   final String? assignmentStatus;
   final DateTime assignedAt;
   final DateTime? acceptedAt;
+  final DateTime? pickedAt;
+  final DateTime? deliveredAt;
   final DateTime? completedAt;
   final Order order;
 
@@ -13,21 +17,32 @@ class Assignment {
     required this.assignmentStatus,
     required this.assignedAt,
     this.acceptedAt,
+    this.pickedAt,
+    this.deliveredAt,
     this.completedAt,
     required this.order,
   });
 
   factory Assignment.fromJson(Map<String, dynamic> json) {
     try {
+      // ✅ AJOUT : Logger le statut reçu
+      final status = json['assignment_status'] as String?;
+      print('📥 Assignment ${json['order']?['order_number']}: assignment_status="$status"');
+
       return Assignment(
-        // ✅ FIX : Utiliser 'as String?' au lieu de 'as String'
         assignmentUuid: json['assignment_uuid'] as String?,
-        assignmentStatus: json['assignment_status'] as String?,
+        assignmentStatus: status,
         assignedAt: json['assigned_at'] != null
             ? DateTime.parse(json['assigned_at'] as String)
-            : DateTime.now(), // Valeur par défaut si null
+            : DateTime.now(),
         acceptedAt: json['accepted_at'] != null
             ? DateTime.parse(json['accepted_at'] as String)
+            : null,
+        pickedAt: json['picked_at'] != null
+            ? DateTime.parse(json['picked_at'] as String)
+            : null,
+        deliveredAt: json['delivered_at'] != null
+            ? DateTime.parse(json['delivered_at'] as String)
             : null,
         completedAt: json['completed_at'] != null
             ? DateTime.parse(json['completed_at'] as String)
@@ -48,12 +63,12 @@ class Assignment {
       'assignment_status': assignmentStatus,
       'assigned_at': assignedAt.toIso8601String(),
       'accepted_at': acceptedAt?.toIso8601String(),
+      'picked_at': pickedAt?.toIso8601String(),
+      'delivered_at': deliveredAt?.toIso8601String(),
       'completed_at': completedAt?.toIso8601String(),
       'order': order.toJson(),
     };
   }
-
-// ... code existant
 
   String get statusDisplay {
     switch (assignmentStatus?.toLowerCase()) {
@@ -61,43 +76,73 @@ class Assignment {
         return 'Assignée';
       case 'accepted':
         return 'Acceptée';
-      case 'picked': // ✅ CORRIGÉ
+      case 'picked':
         return 'Récupérée';
-      case 'delivering': // ✅ CORRIGÉ
+      case 'delivering':
         return 'En transit';
       case 'delivered':
         return 'Livrée';
+      case 'stocked':
+        return 'En stock';
       case 'completed':
         return 'Terminée';
-      case 'failed':
-        return 'Échouée';
+      case 'returned':
+        return 'Retournée';
       case 'cancelled':
         return 'Annulée';
-      case 'returned': // ✅ AJOUTÉ
-        return 'Retournée';
+      case 'failed':
+        return 'Échouée';
       default:
         return assignmentStatus ?? 'Inconnu';
     }
   }
 
-  bool get isAssigned => assignmentStatus?.toLowerCase() == 'assigned';
-  bool get isAccepted => assignmentStatus?.toLowerCase() == 'accepted';
-  bool get isPicked => assignmentStatus?.toLowerCase() == 'picked'; // ✅ CORRIGÉ
-  bool get isDelivering => assignmentStatus?.toLowerCase() == 'delivering'; // ✅ CORRIGÉ
+  // ✅ Getters avec logs de débogage
+  bool get isAssigned {
+    final status = assignmentStatus?.toLowerCase();
+    return status == 'assigned';
+  }
+
+  bool get isAccepted {
+    final status = assignmentStatus?.toLowerCase();
+    final result = status == 'accepted';
+
+    // ✅ AJOUT : Logger pour déboguer
+    if (status == 'accepted' || result) {
+      print('🔍 Assignment ${order.orderNumber}: status="$status" -> isAccepted=$result');
+    }
+
+    return result;
+  }
+
+  bool get isPicked => assignmentStatus?.toLowerCase() == 'picked';
+  bool get isDelivering => assignmentStatus?.toLowerCase() == 'delivering';
   bool get isDelivered => assignmentStatus?.toLowerCase() == 'delivered';
+  bool get isStocked => assignmentStatus?.toLowerCase() == 'stocked';
+  bool get isReturned => assignmentStatus?.toLowerCase() == 'returned';
+  bool get isCancelled => assignmentStatus?.toLowerCase() == 'cancelled';
+  bool get isFailed => assignmentStatus?.toLowerCase() == 'failed';
+
   bool get isCompleted =>
       assignmentStatus?.toLowerCase() == 'completed' ||
-          assignmentStatus?.toLowerCase() == 'delivered';
-  bool get isFailed => assignmentStatus?.toLowerCase() == 'failed';
-  bool get isCancelled => assignmentStatus?.toLowerCase() == 'cancelled';
-  bool get isReturned => assignmentStatus?.toLowerCase() == 'returned'; // ✅ AJOUTÉ
-  
+          assignmentStatus?.toLowerCase() == 'delivered' ||
+          assignmentStatus?.toLowerCase() == 'returned' ||
+          assignmentStatus?.toLowerCase() == 'cancelled' ||
+          assignmentStatus?.toLowerCase() == 'failed';
+
+  bool get isActive =>
+      isAssigned ||
+          isAccepted ||
+          isPicked ||
+          isDelivering;
 
   Assignment copyWith({
     String? assignmentUuid,
     String? assignmentStatus,
     DateTime? assignedAt,
     DateTime? acceptedAt,
+    DateTime? pickedAt,
+    DateTime? deliveredAt,
     DateTime? completedAt,
     Order? order,
   }) {
@@ -106,6 +151,8 @@ class Assignment {
       assignmentStatus: assignmentStatus ?? this.assignmentStatus,
       assignedAt: assignedAt ?? this.assignedAt,
       acceptedAt: acceptedAt ?? this.acceptedAt,
+      pickedAt: pickedAt ?? this.pickedAt,
+      deliveredAt: deliveredAt ?? this.deliveredAt,
       completedAt: completedAt ?? this.completedAt,
       order: order ?? this.order,
     );

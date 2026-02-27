@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../data/models/navigation/navigation_type.dart';
 import '../../data/providers/deliveries_provider.dart';
 import '../../data/providers/delivery_detail_provider.dart';
 import '../../data/services/call_service.dart';
@@ -334,12 +335,16 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
           ),
           destinationName: 'Point de récupération',
           destinationAddress: assignment.order.pickupAddress ?? '',
+          assignmentUuid: assignment.assignmentUuid, // ✅ AJOUT
+          navigationType: NavigationType.pickup,     // ✅ AJOUT
         ),
+
       ),
     );
   }
 
   // ✅ Naviguer vers le lieu de livraison
+  // ✅ CORRECTION dans delivery_detail_screen.dart
   void _navigateToDelivery(assignment) {
     if (assignment.order.deliveryLatitude == null ||
         assignment.order.deliveryLongitude == null) {
@@ -357,14 +362,19 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
       MaterialPageRoute(
         builder: (context) => NavigationScreen(
           destination: LatLng(
-            assignment.order.deliveryLatitude!,
-            assignment.order.deliveryLongitude!,
+            assignment.order.deliveryLatitude!,  // ✅ CORRECTION (était pickupLatitude)
+            assignment.order.deliveryLongitude!, // ✅ CORRECTION (était pickupLongitude)
           ),
-          destinationName: assignment.order.customerName ?? 'Client',
-          destinationAddress: assignment.order.deliveryAddress ?? '',
+          destinationName: assignment.order.customerName ?? 'Client', // ✅ CORRECTION
+          destinationAddress: assignment.order.deliveryAddress ?? '', // ✅ CORRECTION
+          assignmentUuid: assignment.assignmentUuid,
+          navigationType: NavigationType.delivery, // ✅ CORRECTION
         ),
       ),
-    );
+    ).then((_) {
+      // ✅ AJOUT : Rafraîchir après retour
+      ref.read(deliveryDetailProvider.notifier).loadOrderDetail(widget.orderUuid);
+    });
   }
 
   void _showLoadingDialog() {

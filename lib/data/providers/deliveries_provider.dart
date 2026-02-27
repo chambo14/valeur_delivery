@@ -89,6 +89,22 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         AppLogger.info('✅ [DeliveriesNotifier] ${response.data.length} livraisons chargées');
         AppLogger.debug('   - Total: ${response.meta.total}');
 
+        // ✅ AJOUT : Logger les statuts reçus
+        final statusCounts = <String, int>{};
+        for (var assignment in response.data) {
+          final status = assignment.assignmentStatus?.toLowerCase() ?? 'null';
+          statusCounts[status] = (statusCounts[status] ?? 0) + 1;
+
+          // ✅ Logger chaque commande acceptée spécifiquement
+          if (status == 'accepted') {
+            AppLogger.debug(
+                '   ✅ ACCEPTED: ${assignment.order.orderNumber} '
+                    '(isAccepted=${assignment.isAccepted})'
+            );
+          }
+        }
+        AppLogger.info('📊 Distribution: $statusCounts');
+
         state = state.copyWith(
           isLoading: false,
           assignments: response.data,
@@ -97,10 +113,10 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
       },
     );
   }
-
   /// Rafraîchir les livraisons
   Future<void> refreshDeliveries({String? status}) async {
     AppLogger.info('🔄 [DeliveriesNotifier] Rafraîchissement des livraisons');
+    if (status != null) AppLogger.debug('   - Status filter: $status');
 
     state = state.copyWith(isRefreshing: true, errorMessage: null);
 
@@ -119,6 +135,14 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
       },
           (response) {
         AppLogger.info('✅ [DeliveriesNotifier] Rafraîchissement réussi');
+
+        // ✅ AJOUT : Logger les statuts après rafraîchissement
+        final statusCounts = <String, int>{};
+        for (var assignment in response.data) {
+          final status = assignment.assignmentStatus?.toLowerCase() ?? 'null';
+          statusCounts[status] = (statusCounts[status] ?? 0) + 1;
+        }
+        AppLogger.info('📊 Après refresh: $statusCounts');
 
         state = state.copyWith(
           isRefreshing: false,
@@ -179,21 +203,12 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         state = state.copyWith(errorMessage: error);
         return false;
       },
-          (success) {
+          (success) async {  // ✅ AJOUT : async
         AppLogger.info('✅ [DeliveriesNotifier] Acceptation réussie');
 
-        // Mettre à jour l'assignment localement
-        final updatedAssignments = state.assignments.map((assignment) {
-          if (assignment.order.uuid == orderUuid) {
-            return assignment.copyWith(
-              assignmentStatus: 'accepted',
-              acceptedAt: DateTime.now(),
-            );
-          }
-          return assignment;
-        }).toList();
+        // ✅ MODIFICATION : Rafraîchir depuis le serveur au lieu de mettre à jour localement
+        await refreshDeliveries();
 
-        state = state.copyWith(assignments: updatedAssignments);
         return true;
       },
     );
@@ -214,15 +229,12 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         state = state.copyWith(errorMessage: error);
         return false;
       },
-          (success) {
+          (success) async {  // ✅ AJOUT : async
         AppLogger.info('✅ [DeliveriesNotifier] Refus réussi');
 
-        // Retirer l'assignment de la liste
-        final updatedAssignments = state.assignments
-            .where((a) => a.order.uuid != orderUuid)
-            .toList();
+        // ✅ MODIFICATION : Rafraîchir depuis le serveur
+        await refreshDeliveries();
 
-        state = state.copyWith(assignments: updatedAssignments);
         return true;
       },
     );
@@ -251,24 +263,19 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         state = state.copyWith(errorMessage: error);
         return false;
       },
-          (response) {
+          (response) async {  // ✅ AJOUT : async
         AppLogger.info('✅ [DeliveriesNotifier] Statut mis à jour');
         AppLogger.debug('   - Message: ${response.message}');
+        AppLogger.debug('   - Nouveau statut: ${response.data.assignmentStatus}');
 
-        // Mettre à jour l'assignment localement
-        final updatedAssignments = state.assignments.map((assignment) {
-          if (assignment.order.uuid == orderUuid) {
-            // Remplacer par les nouvelles données
-            return response.data;
-          }
-          return assignment;
-        }).toList();
+        // ✅ MODIFICATION : Rafraîchir depuis le serveur pour avoir les données à jour
+        await refreshDeliveries();
 
-        state = state.copyWith(assignments: updatedAssignments);
         return true;
       },
     );
   }
+
   /// Mettre à jour le statut d'une livraison (✅ CORRIGÉ)
   Future<bool> updateAssignmentStatus(
       String orderUuid,
@@ -289,23 +296,12 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         state = state.copyWith(errorMessage: error);
         return false;
       },
-          (success) {
+          (success) async {  // ✅ AJOUT : async
         AppLogger.info('✅ [DeliveriesNotifier] Statut mis à jour');
 
-        // Mettre à jour l'assignment localement
-        final updatedAssignments = state.assignments.map((assignment) {
-          if (assignment.order.uuid == orderUuid) {
-            return assignment.copyWith(
-              assignmentStatus: status,
-              completedAt: status == 'completed' || status == 'delivered'
-                  ? DateTime.now()
-                  : null,
-            );
-          }
-          return assignment;
-        }).toList();
+        // ✅ MODIFICATION : Rafraîchir depuis le serveur
+        await refreshDeliveries();
 
-        state = state.copyWith(assignments: updatedAssignments);
         return true;
       },
     );

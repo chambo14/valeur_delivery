@@ -1,8 +1,11 @@
+// screens/home/home_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../data/providers/deliveries_provider.dart';
 import '../../data/providers/order_summary_provider.dart';
+import '../../network/config/app_logger.dart';
 import '../../theme/app_theme.dart';
 import '../delivery/delivery_detail_screen.dart';
 import '../history/history_screen.dart';
@@ -19,7 +22,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   int _currentIndex = 0;
   String? _selectedFilter;
   late AnimationController _animationController;
@@ -27,6 +30,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
@@ -40,7 +44,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    if (state == AppLifecycleState.resumed) {
+      AppLogger.info('🔄 App resumed - Rafraîchissement des données');
+      ref.read(deliveriesProvider.notifier).refreshDeliveries();
+      ref.read(orderSummaryProvider.notifier).loadSummary();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _animationController.dispose();
     super.dispose();
   }
@@ -57,10 +73,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       appBar: _currentIndex == 0 ? _buildAppBar() : null,
-      body: IndexedStack(
-        index: _currentIndex,
-        children: screens,
-      ),
+      body: IndexedStack(index: _currentIndex, children: screens),
       bottomNavigationBar: _buildBottomNavBar(),
     );
   }
@@ -90,10 +103,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ),
         ],
       ),
-      actions: const [
-        NotificationIconButton(),
-        SizedBox(width: 8),
-      ],
+      actions: const [NotificationIconButton(), SizedBox(width: 8)],
     );
   }
 
@@ -103,11 +113,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final isRefreshing = deliveriesState.isRefreshing;
     final hasError = deliveriesState.hasError;
 
+    AppLogger.debug(
+      '🏠 [HomeScreen] Total assignments: ${deliveriesState.assignments.length}, '
+          'Filtre: "${_selectedFilter ?? "aucun"}"',
+    );
+
     final assignments = _selectedFilter == null
         ? deliveriesState.assignments
-        : deliveriesState.assignments
-        .where((a) => a.assignmentStatus?.toLowerCase() == _selectedFilter)
-        .toList();
+        : deliveriesState.assignments.where((a) {
+      final assignmentStatus = a.assignmentStatus?.toLowerCase();
+      final matches = assignmentStatus == _selectedFilter;
+
+      if (_selectedFilter == 'accepted') {
+        AppLogger.debug(
+          '  🔍 ${a.order.orderNumber}: '
+              'status="$assignmentStatus" == "$_selectedFilter" ? $matches '
+              '(isAccepted=${a.isAccepted})',
+        );
+      }
+
+      return matches;
+    }).toList();
+
+    AppLogger.info(
+      '📋 [HomeScreen] Après filtrage: ${assignments.length} commandes',
+    );
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -145,9 +175,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               child: _buildErrorState(deliveriesState.errorMessage),
             )
           else if (assignments.isEmpty)
-              SliverFillRemaining(
-                child: _buildEmptyState(),
-              )
+              SliverFillRemaining(child: _buildEmptyState())
             else
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -158,16 +186,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         padding: const EdgeInsets.only(bottom: 16),
                         child: DeliveryCard(
                           assignment: assignments[index],
-                          onTap: () {
-                            Navigator.push(
+                          onTap: () async {
+                            await Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => DeliveryDetailScreen(
-                                  orderUuid:
-                                  assignments[index].order.uuid.toString(),
+                                  orderUuid: assignments[index].order.uuid.toString(),
                                 ),
                               ),
                             );
+
+                            if (mounted) {
+                              ref.read(deliveriesProvider.notifier).refreshDeliveries();
+                              ref.read(orderSummaryProvider.notifier).loadSummary();
+                            }
                           },
                         ),
                       );
@@ -177,9 +209,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 ),
               ),
 
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 20),
-          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 20)),
         ],
       ),
     );
@@ -189,7 +219,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final stats = ref.watch(summaryStatsProvider);
     final summaryState = ref.watch(orderSummaryProvider);
 
-    // Si les données sont en cours de chargement
     if (summaryState.isLoading) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -200,7 +229,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       );
     }
 
-    // Si erreur, afficher 0 partout
     if (summaryState.hasError) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -283,10 +311,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       decoration: BoxDecoration(
         color: AppTheme.cardLight,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: color.withOpacity(0.2),
-          width: 1.5,
-        ),
+        border: Border.all(color: color.withOpacity(0.2), width: 1.5),
         boxShadow: [
           BoxShadow(
             color: color.withOpacity(0.08),
@@ -332,12 +357,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Widget _buildFilterChips() {
+    // ✅ CORRECTION : Récupérer deliveriesState
+    final deliveriesState = ref.watch(deliveriesProvider);
+
     final filters = <Map<String, dynamic>>[
       {'value': null, 'label': 'Toutes'},
       {'value': 'assigned', 'label': 'Assignées'},
       {'value': 'accepted', 'label': 'Acceptées'},
-      {'value': 'picked_up', 'label': 'Récupérées'},
-      {'value': 'in_transit', 'label': 'En transit'},
+      {'value': 'picked', 'label': 'Récupérées'},
+      {'value': 'stocked', 'label': 'En stock'},
+      {'value': 'delivering', 'label': 'En transit'},
+      {'value': 'delivered', 'label': 'Livrées'},
     ];
 
     return SingleChildScrollView(
@@ -346,6 +376,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       child: Row(
         children: filters.map((filter) {
           final isSelected = _selectedFilter == filter['value'];
+
+          // ✅ Maintenant deliveriesState est disponible
+          final count = filter['value'] == null
+              ? deliveriesState.assignments.length
+              : deliveriesState.assignments
+              .where(
+                (a) => a.assignmentStatus?.toLowerCase() == filter['value'],
+          )
+              .length;
+
           return Padding(
             padding: const EdgeInsets.only(right: 10),
             child: InkWell(
@@ -353,6 +393,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 setState(() {
                   _selectedFilter = filter['value'];
                 });
+
+                AppLogger.info(
+                  '🔍 [HomeScreen] Filtre "${filter['value']}" sélectionné: $count commandes',
+                );
+
+                ref
+                    .read(deliveriesProvider.notifier)
+                    .refreshDeliveries(status: filter['value']);
               },
               borderRadius: BorderRadius.circular(16),
               child: AnimatedContainer(
@@ -364,10 +412,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 decoration: BoxDecoration(
                   gradient: isSelected
                       ? const LinearGradient(
-                    colors: [
-                      AppTheme.primaryRed,
-                      AppTheme.accentRed,
-                    ],
+                    colors: [AppTheme.primaryRed, AppTheme.accentRed],
                   )
                       : null,
                   color: isSelected ? null : AppTheme.cardLight,
@@ -403,11 +448,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       filter['label'],
                       style: TextStyle(
                         color: isSelected ? Colors.white : AppTheme.textGrey,
-                        fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.w500,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                         fontSize: 14,
                       ),
                     ),
+                    if (count > 0) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Colors.white.withOpacity(0.3)
+                              : AppTheme.primaryRed.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          count.toString(),
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : AppTheme.primaryRed,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -448,10 +515,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           const SizedBox(height: 8),
           Text(
             errorMessage ?? 'Une erreur est survenue',
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppTheme.textGrey,
-            ),
+            style: const TextStyle(fontSize: 14, color: AppTheme.textGrey),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
@@ -465,10 +529,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primaryRed,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 12,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -486,10 +547,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         ? 'assignée'
         : _selectedFilter == 'accepted'
         ? 'acceptée'
-        : _selectedFilter == 'picked_up'
+        : _selectedFilter == 'picked'
         ? 'récupérée'
-        : _selectedFilter == 'in_transit'
+        : _selectedFilter == 'stocked'
+        ? 'en stock'
+        : _selectedFilter == 'delivering'
         ? 'en transit'
+        : _selectedFilter == 'delivered'
+        ? 'livrée'
+        : _selectedFilter == 'returned'
+        ? 'retournée'
+        : _selectedFilter == 'cancelled'
+        ? 'annulée'
         : '';
 
     return Center(
@@ -548,10 +617,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 SizedBox(width: 8),
                 Text(
                   'Les nouvelles livraisons apparaîtront ici',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.textGrey,
-                  ),
+                  style: TextStyle(fontSize: 12, color: AppTheme.textGrey),
                 ),
               ],
             ),
@@ -580,30 +646,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem(
-                0,
-                Icons.home_rounded,
-                Icons.home_outlined,
-                'Accueil',
-              ),
-              _buildNavItem(
-                1,
-                Icons.map_rounded,
-                Icons.map_outlined,
-                'Carte',
-              ),
-              _buildNavItem(
-                2,
-                Icons.history_rounded,
-                Icons.history_rounded,
-                'Historique',
-              ),
-              _buildNavItem(
-                3,
-                Icons.person_rounded,
-                Icons.person_outline_rounded,
-                'Profil',
-              ),
+              _buildNavItem(0, Icons.home_rounded, Icons.home_outlined, 'Accueil'),
+              _buildNavItem(1, Icons.map_rounded, Icons.map_outlined, 'Carte'),
+              _buildNavItem(2, Icons.history_rounded, Icons.history_rounded, 'Historique'),
+              _buildNavItem(3, Icons.person_rounded, Icons.person_outline_rounded, 'Profil'),
             ],
           ),
         ),

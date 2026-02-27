@@ -22,7 +22,7 @@ class NavigationScreen extends ConsumerStatefulWidget {
     super.key,
     required this.destination,
     required this.destinationName,
-    required this.destinationAddress,
+    required this.destinationAddress, String? assignmentUuid, required navigationType,
   });
 
   @override
